@@ -28,6 +28,7 @@ fn main() {
         .insert_resource(search::Search::default())
         .insert_resource(search::ObjectCatalog::default())
         .insert_resource(speed::SpeedState::default())
+        .insert_resource(stars::ExposureSettings::default())
         .add_systems(
             Startup,
             (
@@ -37,6 +38,7 @@ fn main() {
                 search::setup_search_ui,
                 ui::setup_distance_label,
                 ui::setup_speed_label,
+                ui::setup_exposure_label,
             ),
         )
         .add_systems(
@@ -44,11 +46,14 @@ fn main() {
             (
                 camera::toggle_cursor,
                 speed::cycle_speed,
+                stars::adjust_exposure,
                 search::handle_search,
                 navigation::orient_camera_to_target,
                 search::update_search_ui,
                 ui::update_distance_label,
                 ui::update_speed_label,
+                ui::update_exposure_label,
+                stars::update_star_brightness,
                 camera::fly_camera,
                 camera::mouse_look,
                 navigation::draw_direction_ring,

@@ -3,12 +3,16 @@ use crate::camera::FlyCam;
 use crate::constants::{C_AU_PER_S, KM_PER_AU, AU_PER_LY};
 use crate::search::Search;
 use crate::speed::SpeedState;
+use crate::stars::ExposureSettings;
 
 #[derive(Component)]
 pub struct DistanceLabel;
 
 #[derive(Component)]
 pub struct SpeedLabel;
+
+#[derive(Component)]
+pub struct ExposureLabel;
 
 pub fn format_distance(dist_au: f32) -> String {
     let ly = dist_au / AU_PER_LY;
@@ -56,10 +60,7 @@ pub fn setup_distance_label(mut commands: Commands) {
     commands.spawn((
         DistanceLabel,
         Text::new(""),
-        TextFont {
-            font_size: 18.0,
-            ..default()
-        },
+        TextFont { font_size: 18.0, ..default() },
         TextColor(Color::WHITE),
         Node {
             position_type: PositionType::Absolute,
@@ -75,14 +76,26 @@ pub fn setup_speed_label(mut commands: Commands) {
     commands.spawn((
         SpeedLabel,
         Text::new(""),
-        TextFont {
-            font_size: 18.0,
-            ..default()
-        },
+        TextFont { font_size: 18.0, ..default() },
         TextColor(Color::srgb(0.7, 0.9, 0.7)),
         Node {
             position_type: PositionType::Absolute,
             bottom: Val::Px(60.0),
+            right: Val::Px(24.0),
+            ..default()
+        },
+    ));
+}
+
+pub fn setup_exposure_label(mut commands: Commands) {
+    commands.spawn((
+        ExposureLabel,
+        Text::new(""),
+        TextFont { font_size: 18.0, ..default() },
+        TextColor(Color::srgb(0.9, 0.8, 0.5)),
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: Val::Px(96.0),
             right: Val::Px(24.0),
             ..default()
         },
@@ -94,17 +107,12 @@ pub fn update_distance_label(
     cam_query: Query<&Transform, With<FlyCam>>,
     mut label_query: Query<(&mut Text, &mut Visibility), With<DistanceLabel>>,
 ) {
-    let Ok((mut text, mut vis)) = label_query.single_mut() else {
-        return;
-    };
+    let Ok((mut text, mut vis)) = label_query.single_mut() else { return };
     let Some(target) = search.target else {
         *vis = Visibility::Hidden;
         return;
     };
-    let Ok(cam) = cam_query.single() else {
-        return;
-    };
-
+    let Ok(cam) = cam_query.single() else { return };
     let dist_au = (target - cam.translation).length();
     let name = search.target_name.as_deref().unwrap_or("");
     text.0 = format!("{}\n{}", name, format_distance(dist_au));
@@ -116,14 +124,18 @@ pub fn update_speed_label(
     cam_query: Query<&FlyCam>,
     mut label_query: Query<&mut Text, With<SpeedLabel>>,
 ) {
-    let Ok(mut text) = label_query.single_mut() else {
-        return;
-    };
-    let Ok(cam) = cam_query.single() else {
-        return;
-    };
+    let Ok(mut text) = label_query.single_mut() else { return };
+    let Ok(cam) = cam_query.single() else { return };
     let au_per_sec = cam.speed * speed_state.multiplier();
     text.0 = format!("{} [{}]", format_speed(au_per_sec), speed_state.label());
+}
+
+pub fn update_exposure_label(
+    exposure: Res<ExposureSettings>,
+    mut label_query: Query<&mut Text, With<ExposureLabel>>,
+) {
+    let Ok(mut text) = label_query.single_mut() else { return };
+    text.0 = format!("{} [ / ]", exposure.label());
 }
 
 #[cfg(test)]
