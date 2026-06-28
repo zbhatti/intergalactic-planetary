@@ -5,11 +5,16 @@ use crate::camera::FlyCam;
 use crate::search::{ObjectCatalog, Search};
 
 pub const PARSEC_TO_UNITS: f32 = 1000.0;
-pub const SOLAR_RADIUS_UNITS: f32 = 695_700.0 / 149_597_870.7 / 206_265.0 * PARSEC_TO_UNITS;
+// Correct solar radius: 695700 km / 149597870.7 km·AU⁻¹ = 0.004650 AU = 0.004650 game units
+pub const SOLAR_RADIUS_UNITS: f32 = 695_700.0 / 149_597_870.7;
 
 // Physical scale: emissive = 2^ev * BRIGHTNESS_SCALE * luminosity / dist_pc²
 // Calibrated so Vega (L=40.12, d=7.68 pc) ≈ 0.34 at EV 0 (bright but not blown out)
 const BRIGHTNESS_SCALE: f32 = 0.5;
+
+// Stars are scaled up dynamically so their angular diameter is at least this many radians.
+// ~0.002 rad ≈ 0.11° ≈ 2-3 pixels at a typical FOV, ensuring sub-pixel stars are always visible.
+const MIN_STAR_ANGLE: f32 = 0.002;
 
 // (name, RA hours, Dec deg, dist pc, spectral, radius solar radii, luminosity solar)
 const CATALOG_STARS: &[(&str, f32, f32, f32, char, f32, f32)] = &[
@@ -77,6 +82,7 @@ const CATALOG_STARS: &[(&str, f32, f32, f32, char, f32, f32)] = &[
 pub struct Star {
     pub luminosity_solar: f32,
     pub spectral: char,
+    pub radius_solar: f32,
 }
 
 #[derive(Resource)]
@@ -142,7 +148,7 @@ pub fn setup_stars(
                 ..default()
             })),
             Transform::from_translation(pos),
-            Star { luminosity_solar: luminosity, spectral: spect },
+            Star { luminosity_solar: luminosity, spectral: spect, radius_solar },
         ));
         catalog.0.push((name.to_string(), pos));
     }
@@ -152,15 +158,18 @@ pub fn setup_stars(
         emissive: LinearRgba::new(0.07, 0.08, 0.10, 1.0),
         ..default()
     });
-    let bg_mesh = meshes.add(Sphere::new(SOLAR_RADIUS_UNITS * 2.0));
+    // Unit sphere — each instance is scaled by its distance so it subtends MIN_STAR_ANGLE.
+    let bg_mesh = meshes.add(Sphere::new(1.0));
     for _ in 0..2000 {
         let r = rng.gen_range(3000.0f32..80000.0f32);
         let theta = rng.gen_range(0.0f32..2.0 * PI);
         let y = rng.gen_range(-5000.0f32..5000.0f32);
+        let pos = Vec3::new(r * theta.cos(), y, r * theta.sin());
+        let visual_radius = pos.length() * MIN_STAR_ANGLE;
         commands.spawn((
             Mesh3d(bg_mesh.clone()),
             MeshMaterial3d(bg_handle.clone()),
-            Transform::from_translation(Vec3::new(r * theta.cos(), y, r * theta.sin())),
+            Transform::from_translation(pos).with_scale(Vec3::splat(visual_radius)),
         ));
     }
     commands.insert_resource(BackgroundStarMaterial(bg_handle));
@@ -168,7 +177,7 @@ pub fn setup_stars(
 
 pub fn update_star_brightness(
     cam_query: Query<&Transform, With<FlyCam>>,
-    star_query: Query<(&Transform, &MeshMaterial3d<StandardMaterial>, &Star)>,
+    mut star_query: Query<(&mut Transform, &MeshMaterial3d<StandardMaterial>, &Star), Without<FlyCam>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     exposure: Res<ExposureSettings>,
     bg_mat: Res<BackgroundStarMaterial>,
@@ -177,9 +186,8 @@ pub fn update_star_brightness(
     let cam_pos = cam.translation;
     let ev_factor = exposure.factor();
 
-    for (transform, mat_handle, star) in star_query.iter() {
+    for (mut transform, mat_handle, star) in star_query.iter_mut() {
         let dist_units = (transform.translation - cam_pos).length();
-        // clamp minimum dist to prevent extreme brightness at very close range
         let dist_pc = (dist_units / PARSEC_TO_UNITS).max(1e-4);
         let brightness = ev_factor * BRIGHTNESS_SCALE * star.luminosity_solar / (dist_pc * dist_pc);
         let base = spectral_color(star.spectral);
@@ -191,6 +199,13 @@ pub fn update_star_brightness(
                 1.0,
             );
         }
+
+        // Scale the sphere so its angular diameter is always >= MIN_STAR_ANGLE.
+        // When the camera is close, physical size takes over naturally.
+        let physical_radius = star.radius_solar * SOLAR_RADIUS_UNITS;
+        let min_radius = dist_units * MIN_STAR_ANGLE;
+        let visual_radius = physical_radius.max(min_radius);
+        transform.scale = Vec3::splat(visual_radius / physical_radius);
     }
 
     // Background stars scale uniformly with exposure only.

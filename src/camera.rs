@@ -1,4 +1,5 @@
 use bevy::{
+    core_pipeline::bloom::Bloom,
     input::mouse::MouseMotion,
     prelude::*,
     window::CursorGrabMode,
@@ -25,6 +26,8 @@ pub fn setup_camera(mut commands: Commands, mut windows: Query<&mut Window>) {
     }
     commands.spawn((
         Camera3d::default(),
+        Camera { hdr: true, ..default() },
+        Bloom::NATURAL,
         Projection::Perspective(PerspectiveProjection {
             near: 1e-6,
             far: 2_000_000.0,
