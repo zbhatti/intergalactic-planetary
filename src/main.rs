@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 mod camera;
 mod constants;
+mod menu;
 mod navigation;
 mod search;
 mod solar_system;
@@ -29,6 +30,8 @@ fn main() {
         .insert_resource(search::ObjectCatalog::default())
         .insert_resource(speed::SpeedState::default())
         .insert_resource(stars::ExposureSettings::default())
+        .insert_resource(menu::MenuOpen::default())
+        .insert_resource(menu::ShowBackgroundStars::default())
         .add_systems(
             Startup,
             (
@@ -39,16 +42,22 @@ fn main() {
                 ui::setup_distance_label,
                 ui::setup_speed_label,
                 ui::setup_exposure_label,
+                navigation::setup_target_reticle,
+                menu::setup_pause_menu,
             ),
         )
         .add_systems(
             Update,
             (
-                camera::toggle_cursor,
+                menu::toggle_menu,
+                menu::update_pause_menu_visibility,
+                menu::handle_menu_buttons,
+                stars::update_background_star_visibility,
                 speed::cycle_speed,
                 stars::adjust_exposure,
                 search::handle_search,
                 navigation::orient_camera_to_target,
+                navigation::update_target_reticle,
                 search::update_search_ui,
                 ui::update_distance_label,
                 ui::update_speed_label,
@@ -56,7 +65,6 @@ fn main() {
                 stars::update_star_brightness,
                 camera::fly_camera,
                 camera::mouse_look,
-                navigation::draw_direction_ring,
                 navigation::draw_offscreen_arrow,
             ),
         )

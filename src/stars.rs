@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use rand::Rng;
 use std::f32::consts::PI;
 use crate::camera::FlyCam;
+use crate::menu::ShowBackgroundStars;
 use crate::search::{ObjectCatalog, Search};
 
 pub const PARSEC_TO_UNITS: f32 = 1000.0;
@@ -77,6 +78,9 @@ const CATALOG_STARS: &[(&str, f32, f32, f32, char, f32, f32)] = &[
     ("Menkib",           3.9814,  35.7911, 344.0,   'O',  13.0,  263_000.0),
     ("Regor",            8.1591, -47.3368, 336.0,   'O',   6.0,  170_000.0),
 ];
+
+#[derive(Component)]
+pub struct BackgroundStar;
 
 #[derive(Component)]
 pub struct Star {
@@ -170,6 +174,8 @@ pub fn setup_stars(
             Mesh3d(bg_mesh.clone()),
             MeshMaterial3d(bg_handle.clone()),
             Transform::from_translation(pos).with_scale(Vec3::splat(visual_radius)),
+            BackgroundStar,
+            Visibility::Hidden,
         ));
     }
     commands.insert_resource(BackgroundStarMaterial(bg_handle));
@@ -228,6 +234,19 @@ pub fn adjust_exposure(
     }
     if keys.just_pressed(KeyCode::BracketRight) {
         exposure.ev = (exposure.ev + 1).min(ExposureSettings::MAX_EV);
+    }
+}
+
+pub fn update_background_star_visibility(
+    show: Res<ShowBackgroundStars>,
+    mut query: Query<&mut Visibility, With<BackgroundStar>>,
+) {
+    if !show.is_changed() {
+        return;
+    }
+    let vis = if show.0 { Visibility::Visible } else { Visibility::Hidden };
+    for mut v in query.iter_mut() {
+        *v = vis;
     }
 }
 

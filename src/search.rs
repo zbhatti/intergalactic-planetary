@@ -5,6 +5,7 @@ use bevy::{
     },
     prelude::*,
 };
+use crate::menu::MenuOpen;
 
 #[derive(Resource, Default)]
 pub struct ObjectCatalog(pub Vec<(String, Vec3)>);
@@ -71,6 +72,7 @@ pub fn handle_search(
     mut key_events: EventReader<KeyboardInput>,
     mut search: ResMut<Search>,
     catalog: Res<ObjectCatalog>,
+    menu_open: Res<MenuOpen>,
 ) {
     for event in key_events.read() {
         if event.state != ButtonState::Pressed {
@@ -78,7 +80,7 @@ pub fn handle_search(
         }
 
         if !search.active {
-            if event.logical_key == Key::Enter {
+            if event.logical_key == Key::Enter && !menu_open.0 {
                 search.active = true;
                 search.text.clear();
                 search.selected_idx = 0;

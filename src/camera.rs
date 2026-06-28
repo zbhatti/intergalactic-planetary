@@ -5,6 +5,7 @@ use bevy::{
     window::CursorGrabMode,
 };
 use crate::constants::C_AU_PER_S;
+use crate::menu::MenuOpen;
 use crate::search::Search;
 use crate::speed::SpeedState;
 
@@ -43,28 +44,6 @@ pub fn setup_camera(mut commands: Commands, mut windows: Query<&mut Window>) {
     ));
 }
 
-pub fn toggle_cursor(
-    keys: Res<ButtonInput<KeyCode>>,
-    search: Res<Search>,
-    mut locked: ResMut<CursorLocked>,
-    mut windows: Query<&mut Window>,
-) {
-    if search.active {
-        return;
-    }
-    if keys.just_pressed(KeyCode::Escape) {
-        locked.0 = !locked.0;
-        if let Ok(mut window) = windows.single_mut() {
-            window.cursor_options.grab_mode = if locked.0 {
-                CursorGrabMode::Locked
-            } else {
-                CursorGrabMode::None
-            };
-            window.cursor_options.visible = !locked.0;
-        }
-    }
-}
-
 pub fn mouse_look(
     locked: Res<CursorLocked>,
     search: Res<Search>,
@@ -94,11 +73,12 @@ pub fn mouse_look(
 pub fn fly_camera(
     keys: Res<ButtonInput<KeyCode>>,
     search: Res<Search>,
+    menu_open: Res<MenuOpen>,
     speed_state: Res<SpeedState>,
     time: Res<Time>,
     mut query: Query<(&mut Transform, &FlyCam)>,
 ) {
-    if search.active {
+    if search.active || menu_open.0 {
         return;
     }
     let Ok((mut transform, cam)) = query.single_mut() else {

@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use crate::menu::MenuOpen;
 use crate::search::Search;
 
 #[derive(Resource)]
@@ -32,9 +33,10 @@ impl SpeedState {
 pub fn cycle_speed(
     keys: Res<ButtonInput<KeyCode>>,
     search: Res<Search>,
+    menu_open: Res<MenuOpen>,
     mut speed_state: ResMut<SpeedState>,
 ) {
-    if search.active {
+    if search.active || menu_open.0 {
         return;
     }
     if keys.just_pressed(KeyCode::ShiftLeft) || keys.just_pressed(KeyCode::ShiftRight) {
