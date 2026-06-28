@@ -170,3 +170,19 @@ pub fn handle_menu_buttons(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_background_stars_off_by_default() {
+        // Background stars must start hidden so the menu checkbox is accurate.
+        assert!(!ShowBackgroundStars::default().0);
+    }
+
+    #[test]
+    fn test_menu_closed_by_default() {
+        assert!(!MenuOpen::default().0);
+    }
+}

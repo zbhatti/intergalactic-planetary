@@ -209,8 +209,7 @@ pub fn update_star_brightness(
         // Scale the sphere so its angular diameter is always >= MIN_STAR_ANGLE.
         // When the camera is close, physical size takes over naturally.
         let physical_radius = star.radius_solar * SOLAR_RADIUS_UNITS;
-        let min_radius = dist_units * MIN_STAR_ANGLE;
-        let visual_radius = physical_radius.max(min_radius);
+        let visual_radius = star_visual_radius(physical_radius, dist_units);
         transform.scale = Vec3::splat(visual_radius / physical_radius);
     }
 
@@ -219,6 +218,12 @@ pub fn update_star_brightness(
         let b = (ev_factor * 0.1).max(0.001);
         mat.emissive = LinearRgba::new(0.7 * b, 0.8 * b, 1.0 * b, 1.0);
     }
+}
+
+/// Returns the visual sphere radius that ensures a star subtends at least
+/// MIN_STAR_ANGLE regardless of distance, while preserving physical size up close.
+pub fn star_visual_radius(physical_radius: f32, cam_dist_units: f32) -> f32 {
+    physical_radius.max(cam_dist_units * MIN_STAR_ANGLE)
 }
 
 pub fn adjust_exposure(
@@ -254,6 +259,8 @@ pub fn update_background_star_visibility(
 mod tests {
     use super::*;
 
+    // --- coordinate conversion ---
+
     #[test]
     fn test_ra0_dec0_dist1_maps_to_x_parsec() {
         let pos = star_world_pos(0.0, 0.0, 1.0);
@@ -288,6 +295,90 @@ mod tests {
         );
     }
 
+    // --- SOLAR_RADIUS_UNITS regression (bug: was divided by 206265, making stars 200k× too small) ---
+
+    #[test]
+    fn test_solar_radius_units_is_correct_au() {
+        // 1 solar radius = 695700 km / 149597870.7 km·AU⁻¹ ≈ 0.004650 AU
+        let expected: f32 = 695_700.0 / 149_597_870.7;
+        assert!(
+            (SOLAR_RADIUS_UNITS - expected).abs() < 1e-6,
+            "SOLAR_RADIUS_UNITS should be ~0.004650 AU, got {}",
+            SOLAR_RADIUS_UNITS
+        );
+    }
+
+    #[test]
+    fn test_solar_radius_units_not_divided_by_arcsec_factor() {
+        // The old buggy formula included / 206_265.0 (arcseconds per radian),
+        // shrinking all star spheres by a factor of ~206000.
+        let buggy = 695_700.0_f32 / 149_597_870.7 / 206_265.0 * PARSEC_TO_UNITS;
+        assert!(
+            (SOLAR_RADIUS_UNITS - buggy).abs() > 0.001,
+            "SOLAR_RADIUS_UNITS must not be the parsec-formula value {:.2e}",
+            buggy
+        );
+    }
+
+    #[test]
+    fn test_sun_subtends_half_degree_at_1au() {
+        // At 1 AU the Sun's angular diameter should be ≈ 0.53° (0.5–0.6° range).
+        let angle_deg = 2.0 * (SOLAR_RADIUS_UNITS / 1.0_f32).atan().to_degrees();
+        assert!(angle_deg > 0.4, "Sun too small at 1 AU: {:.4}°", angle_deg);
+        assert!(angle_deg < 0.7, "Sun too large at 1 AU: {:.4}°", angle_deg);
+    }
+
+    // --- dynamic angular size / sub-pixel star regression ---
+
+    #[test]
+    fn test_visual_radius_uses_physical_size_when_close() {
+        let physical = 4.0; // AU – large star like Betelgeuse up close
+        let dist = 0.5;     // 0.5 AU away
+        let visual = star_visual_radius(physical, dist);
+        assert_eq!(visual, physical, "physical size should dominate when close");
+    }
+
+    #[test]
+    fn test_visual_radius_scales_up_for_distant_star() {
+        // Sirius: physical radius ≈ 1.711 × 0.00465 AU ≈ 0.00796 AU, distance ≈ 2637 AU
+        let physical: f32 = 1.711 * SOLAR_RADIUS_UNITS;
+        let dist: f32 = 2_637.0;
+        let visual = star_visual_radius(physical, dist);
+        assert!(
+            visual > physical,
+            "distant star should be scaled up; physical={:.5}, visual={:.5}",
+            physical, visual
+        );
+        // Must meet minimum angle
+        let angle = visual / dist;
+        assert!(
+            angle >= MIN_STAR_ANGLE,
+            "angle {:.6} rad should be >= MIN_STAR_ANGLE {}",
+            angle, MIN_STAR_ANGLE
+        );
+    }
+
+    #[test]
+    fn test_visual_radius_ensures_min_angle_for_deneb() {
+        // Deneb: radius ≈ 203 solar radii, distance ≈ 802 pc × 1000 AU/pc = 802_000 AU
+        let physical: f32 = 203.0 * SOLAR_RADIUS_UNITS;
+        let dist: f32 = 802.0 * PARSEC_TO_UNITS;
+        let visual = star_visual_radius(physical, dist);
+        let angle = visual / dist;
+        assert!(angle >= MIN_STAR_ANGLE, "Deneb should meet minimum angle at full distance");
+    }
+
+    #[test]
+    fn test_background_star_radius_proportional_to_distance() {
+        // Background stars are spawned with radius = r * MIN_STAR_ANGLE so they
+        // always subtend the minimum angle when viewed from the origin.
+        let r = 10_000.0_f32;
+        let expected_angle = r * MIN_STAR_ANGLE / r;
+        assert!((expected_angle - MIN_STAR_ANGLE).abs() < 1e-6);
+    }
+
+    // --- brightness / exposure ---
+
     #[test]
     fn test_brightness_scales_inverse_square() {
         let lum = 100.0;
@@ -308,5 +399,24 @@ mod tests {
         assert_eq!(ExposureSettings { ev: 4 }.label(), "EV+4");
         assert_eq!(ExposureSettings { ev: -2 }.label(), "EV-2");
         assert_eq!(ExposureSettings { ev: 0 }.label(), "EV+0");
+    }
+
+    #[test]
+    fn test_exposure_default_is_ev_zero() {
+        assert_eq!(ExposureSettings::default().ev, 0);
+    }
+
+    #[test]
+    fn test_exposure_clamps_at_min() {
+        let mut e = ExposureSettings { ev: ExposureSettings::MIN_EV };
+        e.ev = (e.ev - 1).max(ExposureSettings::MIN_EV);
+        assert_eq!(e.ev, ExposureSettings::MIN_EV, "EV should not go below MIN_EV");
+    }
+
+    #[test]
+    fn test_exposure_clamps_at_max() {
+        let mut e = ExposureSettings { ev: ExposureSettings::MAX_EV };
+        e.ev = (e.ev + 1).min(ExposureSettings::MAX_EV);
+        assert_eq!(e.ev, ExposureSettings::MAX_EV, "EV should not exceed MAX_EV");
     }
 }

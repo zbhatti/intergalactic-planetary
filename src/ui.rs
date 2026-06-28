@@ -142,9 +142,17 @@ pub fn update_exposure_label(
 mod tests {
     use super::*;
 
+    // --- distance formatting ---
+
     #[test]
     fn test_format_distance_1ly() {
         assert_eq!(format_distance(AU_PER_LY), "1.00 ly");
+    }
+
+    #[test]
+    fn test_format_distance_100ly() {
+        let result = format_distance(100.0 * AU_PER_LY);
+        assert!(result.ends_with("ly"), "got: {}", result);
     }
 
     #[test]
@@ -160,6 +168,20 @@ mod tests {
     }
 
     #[test]
+    fn test_format_distance_very_small_shows_metres() {
+        // < 1 km should fall through to metres
+        let result = format_distance(1e-9);
+        assert!(result.ends_with(" m"), "Expected metres, got: {}", result);
+    }
+
+    #[test]
+    fn test_format_distance_zero_does_not_panic() {
+        let _ = format_distance(0.0);
+    }
+
+    // --- speed formatting ---
+
+    #[test]
     fn test_format_speed_at_c() {
         assert_eq!(format_speed(C_AU_PER_S), "1.00c");
     }
@@ -167,5 +189,36 @@ mod tests {
     #[test]
     fn test_format_speed_1000c() {
         assert_eq!(format_speed(1000.0 * C_AU_PER_S), "1000c");
+    }
+
+    #[test]
+    fn test_format_speed_sub_c_shows_km_per_s() {
+        // c ≈ 0.002004 AU/s; 0.01c threshold ≈ 0.00002 AU/s
+        // Use 1e-5 AU/s (≈ 0.005c) which falls below 0.01c into km/s range.
+        let result = format_speed(1e-5);
+        assert!(result.contains("km/s"), "Expected km/s, got: {}", result);
+    }
+
+    #[test]
+    fn test_format_speed_zero_does_not_panic() {
+        let _ = format_speed(0.0);
+    }
+
+    // --- ASCII-only regression (Bevy's default font has no multibyte glyphs) ---
+
+    #[test]
+    fn test_format_distance_is_ascii_only() {
+        for dist in [0.0, 1e-9, 1e-5, 0.001, 1.0, 100.0, AU_PER_LY, 1000.0 * AU_PER_LY] {
+            let s = format_distance(dist);
+            assert!(s.is_ascii(), "format_distance({}) produced non-ASCII: {:?}", dist, s);
+        }
+    }
+
+    #[test]
+    fn test_format_speed_is_ascii_only() {
+        for speed in [0.0, 0.001, C_AU_PER_S * 0.5, C_AU_PER_S, C_AU_PER_S * 1000.0] {
+            let s = format_speed(speed);
+            assert!(s.is_ascii(), "format_speed({}) produced non-ASCII: {:?}", speed, s);
+        }
     }
 }
