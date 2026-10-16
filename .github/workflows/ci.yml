@@ -50,6 +50,16 @@ jobs:
       - name: Test
         run: cargo test --all-targets
 
+      - name: Build standalone release
+        run: cargo build --release --no-default-features
+
+      - name: Upload IP build
+        uses: actions/upload-artifact@v4
+        with:
+          name: IP-${{ runner.os }}
+          path: target/release/intergalactic-planetary${{ runner.os == 'Windows' && '.exe' || '' }}
+          if-no-files-found: error
+
   fmt:
     name: Format
     runs-on: ubuntu-latest

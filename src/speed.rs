@@ -1,6 +1,6 @@
-use bevy::prelude::*;
 use crate::menu::MenuOpen;
 use crate::search::Search;
+use bevy::prelude::*;
 
 #[derive(Resource)]
 pub struct SpeedState {
@@ -15,7 +15,9 @@ impl Default for SpeedState {
 
 impl SpeedState {
     const MULTIPLIERS: [f32; 8] = [0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0, 1000000.0];
-    const LABELS: [&'static str; 8] = ["x0.1", "x1", "x10", "x100", "x1000", "x10000", "x100000", "x1000000"];
+    const LABELS: [&'static str; 8] = [
+        "x0.1", "x1", "x10", "x100", "x1000", "x10000", "x100000", "x1000000",
+    ];
 
     pub fn multiplier(&self) -> f32 {
         Self::MULTIPLIERS[self.idx]

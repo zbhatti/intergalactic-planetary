@@ -1,4 +1,4 @@
-# CLAUDE.md — Developer Guide for intergalactic-planetary
+# CLAUDE.md — Developer Guide for IP (Intergalactic Planetary)
 
 ## What this project is
 
@@ -8,10 +8,17 @@ A 3D universe explorer built with Rust and Bevy. The player can fly through a ph
 
 ```bash
 cargo run          # build and launch
-cargo test         # run all 38 unit tests (headless, no GPU needed)
+cargo test         # run all 42 unit tests (headless, no GPU needed)
+cargo build --release --no-default-features   # standalone release binary
 ```
 
-Rust 1.80+ required. First build downloads Bevy and takes a few minutes; incremental builds are fast because dynamic linking is enabled in dev mode.
+Rust 1.80+ required. First build downloads Bevy and takes a few minutes; incremental builds are fast because the default `dev` feature turns on `bevy/dynamic_linking`. Release builds must use `--no-default-features`, otherwise the binary needs Bevy's shared library next to it.
+
+The project is named **IP** (crate/binary `intergalactic-planetary`, window title "IP - Intergalactic Planetary"). Don't use the name "SpaceEngine"/"Space Engine" for it — that's Cosmographic Software's product, which this project is inspired by but doesn't share code or data with. New features are modelled on SpaceEngine's *visible behaviour* only (run it, observe, reimplement from public data/papers); never decompile or extract data from its install — its license forbids it.
+
+### Dev machine note (Surface Book)
+
+The main dev machine's NVIDIA dGPU sits in a keyboard base that can overheat and hard power-off. A git-ignored `.cargo/config.toml` sets `WGPU_POWER_PREF=low` so `cargo run` uses the Intel iGPU (check the `AdapterInfo` log line). Prefer functionality over graphical polish, and keep GPU-heavy test runs short. To run from an SSH session, target the local X display: `DISPLAY=:0 XAUTHORITY=/run/user/1000/gdm/Xauthority cargo run`.
 
 ## Tech stack
 
@@ -22,7 +29,7 @@ Rust 1.80+ required. First build downloads Bevy and takes a few minutes; increme
 | GPU backend | Metal (macOS) / Vulkan / DX12 | wgpu picks the right one per platform |
 | Build | Cargo with `dynamic_linking` feature | Fast incremental dev builds |
 
-CI runs on Ubuntu, macOS (ARM), and Windows via GitHub Actions (`.github/workflows/ci.yml`).
+CI runs on Ubuntu, macOS (ARM), and Windows via GitHub Actions (`.github/workflows/ci.yml`), and uploads a standalone release binary per OS as the `IP-Linux` / `IP-macOS` / `IP-Windows` artifacts.
 
 ## Coordinate system — read this first
 

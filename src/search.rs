@@ -1,11 +1,11 @@
+use crate::menu::MenuOpen;
 use bevy::{
     input::{
-        keyboard::{Key, KeyboardInput},
         ButtonState,
+        keyboard::{Key, KeyboardInput},
     },
     prelude::*,
 };
-use crate::menu::MenuOpen;
 
 #[derive(Resource, Default)]
 pub struct ObjectCatalog(pub Vec<(String, Vec3)>);
@@ -199,9 +199,7 @@ mod tests {
 
     #[test]
     fn test_no_match_returns_empty() {
-        let catalog = ObjectCatalog(vec![
-            ("Earth".to_string(), Vec3::ZERO),
-        ]);
+        let catalog = ObjectCatalog(vec![("Earth".to_string(), Vec3::ZERO)]);
         let results = catalog_matches(&catalog, "xyznotfound");
         assert!(results.is_empty());
     }

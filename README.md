@@ -1,4 +1,4 @@
-# Space Engine
+# IP (Intergalactic Planetary)
 
 A 3D universe explorer built with Rust and Bevy, inspired by SpaceEngine. Navigate through a physically accurate solar system and a catalog of 57 named stars at real astronomical coordinates.
 
@@ -62,4 +62,4 @@ src/
 cargo test
 ```
 
-16 unit tests cover coordinate conversion (`star_world_pos`), distance/speed formatting, catalog string matching, and camera yaw/pitch derivation.
+42 unit tests cover coordinate conversion (`star_world_pos`), distance/speed formatting, catalog string matching, and camera yaw/pitch derivation.

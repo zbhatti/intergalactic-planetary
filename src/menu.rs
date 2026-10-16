@@ -1,6 +1,6 @@
-use bevy::{app::AppExit, prelude::*, window::CursorGrabMode};
 use crate::camera::CursorLocked;
 use crate::search::Search;
+use bevy::{app::AppExit, prelude::*, window::CursorGrabMode};
 
 #[derive(Resource, Default)]
 pub struct MenuOpen(pub bool);
@@ -31,7 +31,12 @@ pub struct StarLabelsButton;
 #[derive(Component)]
 pub struct StarLabelsLabel;
 
-fn checkbox_button(p: &mut ChildSpawnerCommands, marker: impl Bundle, label_marker: impl Bundle, text: &str) {
+fn checkbox_button(
+    p: &mut ChildSpawnerCommands,
+    marker: impl Bundle,
+    label_marker: impl Bundle,
+    text: &str,
+) {
     p.spawn((
         marker,
         Button,
@@ -47,7 +52,10 @@ fn checkbox_button(p: &mut ChildSpawnerCommands, marker: impl Bundle, label_mark
         b.spawn((
             label_marker,
             Text::new(text),
-            TextFont { font_size: 17.0, ..default() },
+            TextFont {
+                font_size: 17.0,
+                ..default()
+            },
             TextColor(Color::srgb(0.85, 0.85, 0.85)),
         ));
     });
@@ -74,7 +82,10 @@ pub fn setup_pause_menu(mut commands: Commands) {
         .with_children(|p| {
             p.spawn((
                 Text::new("PAUSED"),
-                TextFont { font_size: 30.0, ..default() },
+                TextFont {
+                    font_size: 30.0,
+                    ..default()
+                },
                 TextColor(Color::WHITE),
             ));
 
@@ -95,7 +106,10 @@ pub fn setup_pause_menu(mut commands: Commands) {
             .with_children(|b| {
                 b.spawn((
                     Text::new("Quit"),
-                    TextFont { font_size: 17.0, ..default() },
+                    TextFont {
+                        font_size: 17.0,
+                        ..default()
+                    },
                     TextColor(Color::WHITE),
                 ));
             });
@@ -134,21 +148,24 @@ pub fn update_pause_menu_visibility(
         return;
     }
     if let Ok(mut vis) = menu_query.single_mut() {
-        *vis = if menu_open.0 { Visibility::Visible } else { Visibility::Hidden };
+        *vis = if menu_open.0 {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
     }
 }
 
+type MenuButtonQuery<'a> = (
+    &'a Interaction,
+    &'a mut BackgroundColor,
+    Option<&'a QuitButton>,
+    Option<&'a BgStarsButton>,
+    Option<&'a StarLabelsButton>,
+);
+
 pub fn handle_menu_buttons(
-    mut interaction_query: Query<
-        (
-            &Interaction,
-            &mut BackgroundColor,
-            Option<&QuitButton>,
-            Option<&BgStarsButton>,
-            Option<&StarLabelsButton>,
-        ),
-        (Changed<Interaction>, With<Button>),
-    >,
+    mut interaction_query: Query<MenuButtonQuery, (Changed<Interaction>, With<Button>)>,
     mut bg_stars: ResMut<ShowBackgroundStars>,
     mut star_labels: ResMut<ShowStarLabels>,
     mut exit: EventWriter<AppExit>,
