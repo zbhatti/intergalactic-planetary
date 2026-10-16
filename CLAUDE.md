@@ -12,7 +12,7 @@ cargo test         # run all unit + headless app tests (no GPU needed)
 cargo build --release --no-default-features   # standalone release binary
 ```
 
-Rust 1.80+ required. First build downloads Bevy and takes a few minutes; incremental builds are fast because the default `dev` feature turns on `bevy/dynamic_linking`. Release builds must use `--no-default-features`, otherwise the binary needs Bevy's shared library next to it.
+Rust 1.88+ required. First build downloads Bevy and takes a few minutes; incremental builds are fast because the default `dev` feature turns on `bevy/dynamic_linking`. Release builds must use `--no-default-features`, otherwise the binary needs Bevy's shared library next to it.
 
 The project is named **IP** (crate/binary `intergalactic-planetary`, window title "IP - Intergalactic Planetary"). Don't use the name "SpaceEngine"/"Space Engine" for it — that's Cosmographic Software's product, which this project is inspired by but doesn't share code or data with. New features are modelled on SpaceEngine's *visible behaviour* only (run it, observe, reimplement from public data/papers); never decompile or extract data from its install — its license forbids it.
 

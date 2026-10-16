@@ -162,13 +162,14 @@ pub fn update_goto(
     // Face the target, easing in during the turn phase.
     let to_target = target_pos.0 - cam_pos.0;
     if to_target.length_squared() > 0.0 {
-        let (yaw, pitch, look) = look_rotation(to_target.normalize().as_vec3());
+        let (_, _, look) = look_rotation(to_target.normalize().as_vec3());
         let turn = smoothstep(flight.elapsed / TURN_SECS) as f32;
         transform.rotation = flight.start_rot.slerp(look, turn);
-        if turn >= 1.0 {
-            fly.yaw = yaw;
-            fly.pitch = pitch;
-        }
+        // Keep mouse-look state in step every frame, so cancelling mid-turn (WASD) doesn't
+        // snap the view back on the next mouse movement.
+        let (yaw, pitch) = dir_to_yaw_pitch(*transform.forward());
+        fly.yaw = yaw;
+        fly.pitch = pitch.clamp(-89.0, 89.0);
     }
 
     if flight.elapsed >= flight.total_secs() {
@@ -310,6 +311,50 @@ mod tests {
         press_key(&mut app, KeyCode::KeyW);
         run_frames(&mut app, 1);
         assert!(!app.world().resource::<GoTo>().is_active());
+    }
+
+    #[test]
+    fn test_cancel_mid_turn_keeps_mouse_look_in_sync() {
+        let mut app = goto_app();
+        app.init_resource::<crate::speed::CurrentSpeed>()
+            .add_systems(
+                Update,
+                crate::camera::fly_camera
+                    .after(update_goto)
+                    .in_set(crate::coords::NavSet::Input),
+            );
+        // Target off to the side (+X) so the turn is a large yaw.
+        let body = app
+            .world_mut()
+            .spawn((
+                WorldPos(DVec3::X * 1.0e6),
+                BodyRadius(1.0),
+                Transform::default(),
+            ))
+            .id();
+        let cam = app
+            .world_mut()
+            .spawn((
+                FlyCam::default(),
+                WorldPos(DVec3::ZERO),
+                Transform::default(),
+            ))
+            .id();
+        app.world_mut().resource_mut::<Search>().target = Some(body);
+        press_key(&mut app, KeyCode::KeyG);
+        run_frames(&mut app, 10); // ~0.17 s into the 0.6 s turn
+        press_key(&mut app, KeyCode::KeyW);
+        run_frames(&mut app, 1);
+        assert!(!app.world().resource::<GoTo>().is_active());
+
+        let fly_forward = app.world().get::<FlyCam>(cam).unwrap().rotation() * Vec3::NEG_Z;
+        let cam_forward = *app.world().get::<Transform>(cam).unwrap().forward();
+        assert!(
+            fly_forward.dot(cam_forward) > 0.9999,
+            "mouse-look state {fly_forward} diverged from view {cam_forward}"
+        );
+        // And the turn really was partial (not already at the target).
+        assert!(cam_forward.dot(Vec3::X) < 0.99);
     }
 
     #[test]
