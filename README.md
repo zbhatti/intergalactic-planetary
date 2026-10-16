@@ -39,7 +39,7 @@ A 3D universe explorer built with Rust and Bevy, inspired by SpaceEngine. Naviga
 cargo run
 ```
 
-Requires Rust 1.80+ and a Metal-capable GPU (macOS) or Vulkan/DX12 (other platforms).
+Requires Rust 1.88+ and a Metal-capable GPU (macOS) or Vulkan/DX12 (other platforms).
 
 ## Project structure
 

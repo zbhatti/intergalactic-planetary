@@ -1,4 +1,5 @@
 use crate::camera::FlyCam;
+use crate::coords::{WorldPos, view_transform};
 use crate::search::Search;
 use bevy::{prelude::*, window::PrimaryWindow};
 
@@ -21,27 +22,38 @@ pub fn dir_to_yaw_pitch(dir: Vec3) -> (f32, f32) {
 
 pub fn orient_camera_to_target(
     mut search: ResMut<Search>,
-    mut cam_query: Query<(&mut Transform, &mut FlyCam)>,
+    mut cam_query: Query<(&WorldPos, &mut Transform, &mut FlyCam)>,
+    targets: Query<&WorldPos, Without<FlyCam>>,
 ) {
     if !search.should_orient {
         return;
     }
     search.should_orient = false;
-    let Some(target) = search.target else { return };
-    let Ok((mut transform, mut cam)) = cam_query.single_mut() else {
+    let Some(target) = search.target.and_then(|e| targets.get(e).ok()) else {
+        return;
+    };
+    let Ok((cam_pos, mut transform, mut cam)) = cam_query.single_mut() else {
         return;
     };
 
-    let dir = (target - transform.translation).normalize();
-    let (yaw, pitch) = dir_to_yaw_pitch(dir);
+    let offset = target.0 - cam_pos.0;
+    if offset.length_squared() == 0.0 {
+        return;
+    }
+    let (yaw, pitch) = dir_to_yaw_pitch(offset.normalize().as_vec3());
     cam.pitch = pitch.clamp(-89.0, 89.0);
     cam.yaw = yaw;
-    transform.rotation = Quat::from_euler(
-        EulerRot::YXZ,
-        cam.yaw.to_radians(),
-        cam.pitch.to_radians(),
-        0.0,
-    );
+    transform.rotation = cam.rotation();
+}
+
+/// Target position relative to the camera (f32, render-independent), if there is a target.
+fn target_offset(
+    search: &Search,
+    cam_pos: &WorldPos,
+    targets: &Query<&WorldPos, Without<FlyCam>>,
+) -> Option<Vec3> {
+    let target = targets.get(search.target?).ok()?;
+    Some((target.0 - cam_pos.0).as_vec3())
 }
 
 pub fn setup_target_reticle(mut commands: Commands) {
@@ -64,68 +76,64 @@ pub fn setup_target_reticle(mut commands: Commands) {
 
 pub fn update_target_reticle(
     search: Res<Search>,
-    cam_query: Query<(&Camera, &GlobalTransform), With<FlyCam>>,
+    cam_query: Query<(&Camera, &WorldPos, &Transform), With<FlyCam>>,
+    targets: Query<&WorldPos, Without<FlyCam>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut reticle_query: Query<(&mut Node, &mut Visibility), With<TargetReticle>>,
 ) {
     let Ok((mut node, mut vis)) = reticle_query.single_mut() else {
         return;
     };
-
-    let Some(target) = search.target else {
-        *vis = Visibility::Hidden;
+    let (Ok((camera, cam_pos, cam_t)), Ok(window)) = (cam_query.single(), windows.single()) else {
         return;
     };
-    let Ok((camera, cam_global)) = cam_query.single() else {
-        return;
-    };
-    let Ok(window) = windows.single() else { return };
-
     let vp = Vec2::new(window.width(), window.height());
-
-    let on_screen = camera
-        .world_to_viewport(cam_global, target)
-        .map(|sp| sp.x >= 0.0 && sp.x <= vp.x && sp.y >= 0.0 && sp.y <= vp.y)
-        .unwrap_or(false);
-
-    if !on_screen {
-        *vis = Visibility::Hidden;
+    let screen = target_offset(&search, cam_pos, &targets).and_then(|rel| {
+        camera
+            .world_to_viewport(&view_transform(cam_t.rotation), rel)
+            .ok()
+            .filter(|sp| sp.x >= 0.0 && sp.x <= vp.x && sp.y >= 0.0 && sp.y <= vp.y)
+    });
+    let Some(sp) = screen else {
+        vis.set_if_neq(Visibility::Hidden);
         return;
-    }
-
-    let screen_pos = camera.world_to_viewport(cam_global, target).unwrap();
-    node.left = Val::Px(screen_pos.x - RETICLE_RADIUS);
-    node.top = Val::Px(screen_pos.y - RETICLE_RADIUS);
-    *vis = Visibility::Visible;
+    };
+    node.left = Val::Px(sp.x - RETICLE_RADIUS);
+    node.top = Val::Px(sp.y - RETICLE_RADIUS);
+    vis.set_if_neq(Visibility::Visible);
 }
 
 pub fn draw_offscreen_arrow(
     mut gizmos: Gizmos,
     search: Res<Search>,
-    cam_query: Query<(&Camera, &GlobalTransform, &Transform), With<FlyCam>>,
+    cam_query: Query<(&Camera, &WorldPos, &Transform), With<FlyCam>>,
+    targets: Query<&WorldPos, Without<FlyCam>>,
     windows: Query<&Window, With<PrimaryWindow>>,
 ) {
-    let Some(target) = search.target else { return };
-    let Ok((camera, cam_global, cam_local)) = cam_query.single() else {
+    let (Ok((camera, cam_world, cam_local)), Ok(window)) = (cam_query.single(), windows.single())
+    else {
         return;
     };
-    let Ok(window) = windows.single() else { return };
-
+    let Some(rel) = target_offset(&search, cam_world, &targets) else {
+        return;
+    };
     let vp = Vec2::new(window.width(), window.height());
 
     let on_screen = camera
-        .world_to_viewport(cam_global, target)
+        .world_to_viewport(&view_transform(cam_local.rotation), rel)
         .is_ok_and(|sp| sp.x >= 0.0 && sp.x <= vp.x && sp.y >= 0.0 && sp.y <= vp.y);
-    if on_screen {
+    if on_screen || rel.length_squared() == 0.0 {
         return;
     }
 
     let cam_right = cam_local.right().as_vec3();
     let cam_up = cam_local.up().as_vec3();
     let cam_forward = cam_local.forward().as_vec3();
-    let cam_pos = cam_global.translation();
+    // Render-space camera position: synced from WorldPos this frame (NavSet::Rebase), and
+    // kept within 1 AU of the origin, so gizmos 1e-4 AU in front of it stay precise.
+    let cam_pos = cam_local.translation;
 
-    let dir = (target - cam_pos).normalize();
+    let dir = rel.normalize();
     let in_front = dir.dot(cam_forward) > 0.0;
 
     let sr = dir.dot(cam_right);

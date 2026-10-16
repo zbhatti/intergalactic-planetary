@@ -1,12 +1,15 @@
 //! Performance tooling: F3 overlay and a scripted benchmark mode.
 //!
-//! Benchmark: `IP_BENCH=20 cargo run` runs a scripted camera path for 20 seconds,
+//! Benchmark: `IP_BENCH=20 cargo run` flies a scripted go-to tour for 20 seconds,
 //! prints one summary line (paste it into PERF.md), saves a mid-run screenshot to
 //! `target/ip_bench.png`, then exits. Runs are vsync-capped
 //! so they never push the GPU harder than normal play.
 
 use crate::camera::FlyCam;
+use crate::coords::{BodyRadius, NavSet, WorldPos};
+use crate::goto::{Flight, GoTo};
 use crate::menu::{ShowBackgroundStars, ShowStarLabels};
+use crate::search::{ObjectCatalog, Search};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use std::time::Instant;
@@ -32,6 +35,7 @@ pub struct Bench {
     pub started: Option<Instant>,
     pub frame_ms: Vec<f32>,
     pub screenshot_taken: bool,
+    pub tour_idx: usize,
 }
 
 impl Bench {
@@ -43,6 +47,7 @@ impl Bench {
             started: None,
             frame_ms: Vec::new(),
             screenshot_taken: false,
+            tour_idx: 0,
         })
     }
 }
@@ -147,23 +152,41 @@ pub fn bench_setup(
     overlay.0 = true;
 }
 
-/// Benchmark camera script: a steady 360-degree pan so every part of the sky is drawn.
+/// Benchmark tour: go-to flights spanning planet, interplanetary and interstellar scales,
+/// so every run exercises adaptive speed, rebasing at high speed, and label projection.
+pub const BENCH_TOUR: &[&str] = &["Earth", "Jupiter", "Sirius", "Deneb", "Sun"];
+
 pub fn bench_drive_camera(
-    bench: Res<Bench>,
-    time: Res<Time>,
-    mut cam: Query<(&mut Transform, &mut FlyCam)>,
+    mut bench: ResMut<Bench>,
+    catalog: Res<ObjectCatalog>,
+    mut search: ResMut<Search>,
+    mut goto: ResMut<GoTo>,
+    cam: Query<(&WorldPos, &Transform), With<FlyCam>>,
+    targets: Query<(&WorldPos, &BodyRadius)>,
 ) {
-    let Ok((mut transform, mut cam)) = cam.single_mut() else {
+    if goto.is_active() {
+        return;
+    }
+    let Ok((cam_pos, cam_t)) = cam.single() else {
         return;
     };
-    let rate_deg = 360.0 / bench.duration_secs;
-    cam.yaw += rate_deg * time.delta_secs();
-    transform.rotation = Quat::from_euler(
-        EulerRot::YXZ,
-        cam.yaw.to_radians(),
-        cam.pitch.to_radians(),
-        0.0,
-    );
+    let name = BENCH_TOUR[bench.tour_idx % BENCH_TOUR.len()];
+    bench.tour_idx += 1;
+    let Some(&(_, entity)) = catalog.0.iter().find(|(n, _)| n == name) else {
+        return;
+    };
+    let Ok((target_pos, radius)) = targets.get(entity) else {
+        return;
+    };
+    search.target = Some(entity);
+    search.target_name = Some(name.to_string());
+    goto.0 = Some(Flight::new(
+        entity,
+        cam_pos.0,
+        cam_t.rotation,
+        target_pos.0,
+        radius.0,
+    ));
 }
 
 /// Where bench mode saves its mid-run screenshot, for checking a change visually.
@@ -227,7 +250,15 @@ impl Plugin for PerfPlugin {
         if let Some(bench) = Bench::from_env() {
             app.insert_resource(bench)
                 .add_systems(Startup, bench_setup)
-                .add_systems(Update, (bench_drive_camera, bench_record));
+                .add_systems(
+                    Update,
+                    (
+                        bench_drive_camera
+                            .in_set(NavSet::Input)
+                            .before(crate::goto::update_goto),
+                        bench_record,
+                    ),
+                );
         }
     }
 }
