@@ -15,7 +15,8 @@ cargo test --release -- --ignored --nocapture perf_   # CPU micro-benchmarks for
 - Runs are vsync-capped at 60 Hz, so `p50` sits near 16.7 ms whenever the frame budget is met. What to
   watch: `p95`/`max` creeping toward or past 16.7 ms, and `hitches` (frames > 1.5x median).
 - Bench mode turns on every label and the background stars (worst case), then loops a go-to tour
-  (override with `IP_BENCH_TOUR=Saturn,Titan` to screenshot specific objects)
+  (override with `IP_BENCH_TOUR=Saturn,Titan` to screenshot specific objects; `IP_BENCH_KEYS=B,I`
+  presses keys at startup to put UI panels in the screenshot)
   (Earth -> Jupiter -> Sirius -> Deneb -> Sun) that covers planetary to ~800 pc scales.
   Before Phase 1 (2026-10-16 baseline) it panned 360 degrees instead, so rows before and after
   that change aren't strictly comparable.
@@ -33,6 +34,7 @@ cargo test --release -- --ignored --nocapture perf_   # CPU micro-benchmarks for
 | 2026-10-16 | Phase 1: f64 world + floating origin, adaptive speed, go-to tour bench | release | 1201 | 16.67 | 17.99 | 23.84 | 0 | 2156 |
 | 2026-10-16 | Phase 2.1: click-select + info panel | release | 1201 | 16.67 | 17.65 | 22.99 | 0 | 2158 |
 | 2026-10-16 | Phase 2.2: 5 dwarf planets + 21 moons, min apparent size for bodies (tour: Jupiter) | release | 481 | 16.67 | 17.53 | 19.56 | 0 | 2210 |
+| 2026-10-16 | Phase 2.3: solar system browser open (tour: Saturn, keys: B) | release | 361 | 16.67 | 17.70 | 19.66 | 0 | 2211 |
 
 ## Micro-benchmarks (`cargo test --release -- --ignored --nocapture perf_`)
 

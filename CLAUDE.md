@@ -76,6 +76,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `constants.rs` | Physical constants: `C_AU_PER_S`, `KM_PER_AU`, `AU_PER_LY` |
 | `coords.rs` | `WorldPos`/`BodyRadius`, floating origin + rebase, nearest-body scan, `NavSet` ordering |
 | `info.rs` | `BodyInfo`/`BodyKind` (name + facts per object), crosshair click-select, info panel (I) |
+| `browser.rs` | B: solar system browser (Sun → planets/dwarfs → moons by orbit size) |
 | `goto.rs` | G: go-to flight (turn, then log-distance travel to a few radii from the target) |
 | `camera.rs` | `FlyCam` component, `CursorLocked` resource, camera spawn + WASD movement in world space |
 | `search.rs` | `Search` + `ObjectCatalog` resources, search UI, `catalog_matches` |
@@ -99,6 +100,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | G | Go to the selected object |
 | Left click | Select the object under the center crosshair |
 | I | Show/hide the info panel for the selection |
+| B | Solar system browser (Up/Down, Enter to select, B/Esc to close) |
 | `[` / `]` | Decrease / increase exposure (EV-5 to EV+20) |
 | Enter | Open object search |
 | Arrow Up/Down | Navigate search results |
