@@ -37,6 +37,7 @@ cargo test --release -- --ignored --nocapture perf_   # CPU micro-benchmarks for
 | 2026-10-16 | Phase 2.2: 5 dwarf planets + 21 moons, min apparent size for bodies (tour: Jupiter) | release | 481 | 16.67 | 17.53 | 19.56 | 0 | 2210 |
 | 2026-10-16 | Phase 2.3: solar system browser open (tour: Saturn, keys: B) | release | 361 | 16.67 | 17.70 | 19.66 | 0 | 2211 |
 | 2026-10-16 | Phase 2.4: HYG starfield, 109k stars / 623 chunks; 2000 random bg stars removed | release | 1201 | 16.67 | 17.57 | 27.72 | 1 | 835 |
+| 2026-10-16 | Phase 2.5: named HYG entities (+483), sphere proxy, additive starfield (tour: Barnard's Star) | release | 720 | 16.67 | 17.45 | 21.67 | 0 | 1318 |
 
 ## Micro-benchmarks (`cargo test --release -- --ignored --nocapture perf_`)
 

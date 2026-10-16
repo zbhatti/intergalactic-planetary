@@ -1,5 +1,6 @@
 // Catalog starfield: one camera-facing billboard per star, sized and lit with the same
 // model as the sphere stars in stars.rs (all constants arrive as uniforms from Rust).
+// Drawn with additive blending (AlphaMode::Add).
 
 #import bevy_pbr::mesh_functions::get_world_from_local
 #import bevy_pbr::mesh_view_bindings::view
@@ -17,6 +18,9 @@ struct StarfieldParams {
     // Points fade out between these camera distances (AU); a sphere takes over up close.
     fade_near_au: f32,
     fade_far_au: f32,
+    // Render-space center (xyz) and radius (w, AU) of a sphere whose points are hidden
+    // because a proxy sphere draws that star; w = 0 disables.
+    hide: vec4<f32>,
 };
 
 @group(2) @binding(0) var<uniform> params: StarfieldParams;
@@ -49,6 +53,9 @@ fn vertex(v: Vertex) -> VertexOutput {
         params.max_brightness,
     );
     brightness *= smoothstep(params.fade_near_au, params.fade_far_au, dist_au);
+    if params.hide.w > 0.0 && distance(world, params.hide.xyz) < params.hide.w {
+        brightness = 0.0;
+    }
 
     // Stars are far smaller than MIN_STAR_ANGLE at these distances, so the min-angle
     // branch of star_visual_radius applies: radius = distance * angle.
@@ -64,9 +71,11 @@ fn vertex(v: Vertex) -> VertexOutput {
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Flat emissive disk, matching the emissive sphere stars.
+    // Flat emissive disk, matching the emissive sphere stars; added to what's behind.
     if dot(in.corner, in.corner) > 1.0 {
         discard;
     }
-    return vec4<f32>(in.color, 1.0);
+    // AlphaMode::Add uses premultiplied blending (src + dst * (1 - src.a)); alpha 0 makes
+    // it purely additive.
+    return vec4<f32>(in.color, 0.0);
 }

@@ -85,6 +85,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `solar_system.rs` | Sun, 8 planets, 5 dwarf planets, 21 major moons from JPL elements; min apparent size for bodies |
 | `stars.rs` | 58 curated sphere stars (matched to HYG for visual luminosity), `star_world_pos`, brightness model, dynamic scaling |
 | `hyg.rs` | Embedded HYG catalog (`data/hyg_stars.bin`): little-endian parser, magnitudes, direction matching |
+| `hyg_bodies.rs` | HYG stars as entities on demand: 540 named (search/go-to), crosshair-picked, and a close-range sphere proxy for the nearest star (<2000 AU) |
 | `starfield.rs` + `starfield.wgsl` | 109k HYG stars as billboard meshes in 200 pc chunks (one draw each); shader brightness/size = same model as `stars.rs`; nearest-catalog-star scan |
 | `ui.rs` | Distance/speed/exposure HUD labels, `format_distance`, `format_speed` |
 | `navigation.rs` | HUD reticle, off-screen arrow gizmo, camera auto-orient |
@@ -186,6 +187,14 @@ Without this filter the system won't compile.
 
 Point-source brightness (`L / d²`) reaches ~1e10 within a few AU of a star, and bloom then whites out the screen.
 `star_brightness` caps it at `MAX_STAR_BRIGHTNESS` (30). Remove the cap only together with real auto-exposure.
+
+### 11. Catalog stars: points far, spheres near
+
+Starfield points use f32 chunk-local positions (error up to ~8 AU). Within `PROXY_RANGE_AU` (2000 AU) of a
+catalog star, `hyg_bodies::update_star_proxy` gives that star's entity a real sphere (same `Star` brightness/size
+system as the curated stars) and hides its point through the `hide` uniform. Don't remove the hide: a point drawn
+a few AU off would sit visibly beside the sphere. The starfield blends additively (`AlphaMode::Add`, fragment
+alpha 0). Opaque billboards would draw dim stars as black disks over things behind them.
 
 ### 10. Benchmarks need an awake display
 
