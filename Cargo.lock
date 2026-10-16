@@ -2170,7 +2170,6 @@ name = "intergalactic-planetary"
 version = "0.1.0"
 dependencies = [
  "bevy",
- "rand",
 ]
 
 [[package]]

@@ -6,6 +6,7 @@ mod camera;
 mod constants;
 mod coords;
 mod goto;
+mod hyg;
 mod info;
 mod menu;
 mod navigation;
@@ -14,6 +15,7 @@ mod perf;
 mod search;
 mod solar_system;
 mod speed;
+mod starfield;
 mod stars;
 #[cfg(test)]
 mod testing;
@@ -33,6 +35,7 @@ fn main() {
             goto::GoToPlugin,
             info::InfoPlugin,
             browser::BrowserPlugin,
+            starfield::StarfieldPlugin,
             perf::PerfPlugin,
         ))
         .insert_resource(ClearColor(Color::BLACK))
@@ -49,7 +52,8 @@ fn main() {
         .init_resource::<speed::CurrentSpeed>()
         .insert_resource(stars::ExposureSettings::default())
         .insert_resource(menu::MenuOpen::default())
-        .insert_resource(menu::ShowBackgroundStars::default())
+        .insert_resource(menu::ShowCatalogStars::default())
+        .insert_resource(hyg::HygCatalog::embedded())
         .insert_resource(menu::ShowStarLabels::default())
         .add_systems(
             Startup,
@@ -71,7 +75,6 @@ fn main() {
                 menu::toggle_menu,
                 menu::update_pause_menu_visibility,
                 menu::handle_menu_buttons,
-                stars::update_background_star_visibility,
                 stars::adjust_exposure,
                 search::handle_search,
                 search::update_search_ui,

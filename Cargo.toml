@@ -28,7 +28,6 @@ bevy = { version = "0.16", default-features = false, features = [
     "tonemapping_luts",
     "x11",
 ] }
-rand = "0.8"
 
 # `dev` (on by default) links Bevy dynamically for fast incremental builds.
 # Release builds turn it off so the binary runs standalone:

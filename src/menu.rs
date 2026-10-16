@@ -5,9 +5,20 @@ use bevy::{app::AppExit, prelude::*, window::CursorGrabMode};
 #[derive(Resource, Default)]
 pub struct MenuOpen(pub bool);
 
-/// Whether randomly generated background stars are rendered. Off by default.
-#[derive(Resource, Default)]
-pub struct ShowBackgroundStars(pub bool);
+pub const CATALOG_STARS_LABEL: &str = "Catalog stars (HYG)";
+
+/// Attribution required by the CC BY-SA 4.0 license of the embedded star data.
+pub const DATA_CREDIT: &str = "Star data: HYG Database v4.4 (c) astronexus.com, CC BY-SA 4.0\nOrbits: NASA/JPL Solar System Dynamics";
+
+/// Whether the HYG catalog starfield (~109k real stars) is rendered. On by default.
+#[derive(Resource)]
+pub struct ShowCatalogStars(pub bool);
+
+impl Default for ShowCatalogStars {
+    fn default() -> Self {
+        Self(true)
+    }
+}
 
 /// Whether catalog star name labels are shown. Off by default.
 #[derive(Resource, Default)]
@@ -20,10 +31,10 @@ pub struct PauseMenu;
 pub struct QuitButton;
 
 #[derive(Component)]
-pub struct BgStarsButton;
+pub struct CatalogStarsButton;
 
 #[derive(Component)]
-pub struct BgStarsLabel;
+pub struct CatalogStarsLabel;
 
 #[derive(Component)]
 pub struct StarLabelsButton;
@@ -89,8 +100,21 @@ pub fn setup_pause_menu(mut commands: Commands) {
                 TextColor(Color::WHITE),
             ));
 
-            checkbox_button(p, BgStarsButton, BgStarsLabel, "[ ] Background stars");
+            checkbox_button(
+                p,
+                CatalogStarsButton,
+                CatalogStarsLabel,
+                &checkbox_text(CATALOG_STARS_LABEL, true),
+            );
             checkbox_button(p, StarLabelsButton, StarLabelsLabel, "[ ] Star labels");
+            p.spawn((
+                Text::new(DATA_CREDIT),
+                TextFont {
+                    font_size: 12.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.6, 0.6, 0.7)),
+            ));
 
             p.spawn((
                 QuitButton,
@@ -161,18 +185,18 @@ type MenuButtonQuery<'a> = (
     &'a Interaction,
     &'a mut BackgroundColor,
     Option<&'a QuitButton>,
-    Option<&'a BgStarsButton>,
+    Option<&'a CatalogStarsButton>,
     Option<&'a StarLabelsButton>,
 );
 
 pub fn handle_menu_buttons(
     mut interaction_query: Query<MenuButtonQuery, (Changed<Interaction>, With<Button>)>,
-    mut bg_stars: ResMut<ShowBackgroundStars>,
+    mut bg_stars: ResMut<ShowCatalogStars>,
     mut star_labels: ResMut<ShowStarLabels>,
     mut exit: EventWriter<AppExit>,
     menu_open: Res<MenuOpen>,
-    mut bg_label_query: Query<&mut Text, (With<BgStarsLabel>, Without<StarLabelsLabel>)>,
-    mut sl_label_query: Query<&mut Text, (With<StarLabelsLabel>, Without<BgStarsLabel>)>,
+    mut bg_label_query: Query<&mut Text, (With<CatalogStarsLabel>, Without<StarLabelsLabel>)>,
+    mut sl_label_query: Query<&mut Text, (With<StarLabelsLabel>, Without<CatalogStarsLabel>)>,
 ) {
     if !menu_open.0 {
         return;
@@ -187,7 +211,7 @@ pub fn handle_menu_buttons(
                 if bg_btn.is_some() {
                     bg_stars.0 = !bg_stars.0;
                     if let Ok(mut text) = bg_label_query.single_mut() {
-                        text.0 = checkbox_text("Background stars", bg_stars.0);
+                        text.0 = checkbox_text(CATALOG_STARS_LABEL, bg_stars.0);
                     }
                 }
                 if sl_btn.is_some() {
@@ -228,8 +252,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_background_stars_off_by_default() {
-        assert!(!ShowBackgroundStars::default().0);
+    fn test_catalog_stars_on_by_default() {
+        assert!(ShowCatalogStars::default().0);
     }
 
     #[test]
@@ -254,7 +278,8 @@ mod tests {
 
     #[test]
     fn test_checkbox_text_is_ascii_only() {
-        assert!(checkbox_text("Background stars", true).is_ascii());
-        assert!(checkbox_text("Background stars", false).is_ascii());
+        assert!(checkbox_text(CATALOG_STARS_LABEL, true).is_ascii());
+        assert!(checkbox_text(CATALOG_STARS_LABEL, false).is_ascii());
+        assert!(DATA_CREDIT.is_ascii());
     }
 }

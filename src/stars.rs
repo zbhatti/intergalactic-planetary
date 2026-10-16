@@ -1,29 +1,30 @@
 use crate::camera::FlyCam;
 use crate::constants::{AU_PER_PC, KM_PER_AU};
 use crate::coords::{BodyRadius, WorldPos, view_transform};
+use crate::hyg::HygCatalog;
 use crate::info::{BodyInfo, BodyKind, star_facts};
-use crate::menu::{ShowBackgroundStars, ShowStarLabels};
+use crate::menu::ShowStarLabels;
 use crate::orbit::{equatorial_to_world, radec_to_equatorial};
 use crate::search::{ObjectCatalog, Search};
 use bevy::math::DVec3;
 use bevy::prelude::*;
-use rand::Rng;
-use std::f64::consts::PI;
 
 // Correct solar radius: 695700 km / 149597870.7 km·AU⁻¹ = 0.004650 AU (world units are AU)
 pub const SOLAR_RADIUS_UNITS: f64 = 695_700.0 / KM_PER_AU;
 
-// Physical scale: emissive = 2^ev * BRIGHTNESS_SCALE * luminosity / dist_pc²
-// Calibrated so Vega (L=40.12, d=7.68 pc) ≈ 0.34 at EV 0 (bright but not blown out)
-const BRIGHTNESS_SCALE: f32 = 0.5;
+// Physical scale: emissive = 2^ev * BRIGHTNESS_SCALE * visual_luminosity / dist_pc²
+// Calibrated so Vega (visual L≈50 from HYG, d=7.68 pc) ≈ 0.34 at EV 0 (bright but not blown out)
+pub const BRIGHTNESS_SCALE: f32 = 0.4;
 
 // Ceiling on a star's emissive brightness. Point-source 1/d^2 brightness reaches ~1e10 within
 // a few AU of a star; with bloom that whites out the whole screen on arrival. Capped, a close
 // star reads as a bright disk with a modest glow. (Proper fix: auto-exposure, see ROADMAP.)
-const MAX_STAR_BRIGHTNESS: f32 = 30.0;
+pub const MAX_STAR_BRIGHTNESS: f32 = 30.0;
+/// Distance clamp for the 1/d^2 brightness law, parsecs.
+pub const MIN_BRIGHTNESS_DIST_PC: f32 = 1e-4;
 
 pub fn star_brightness(ev_factor: f32, luminosity_solar: f32, dist_pc: f32) -> f32 {
-    let dist_pc = dist_pc.max(1e-4);
+    let dist_pc = dist_pc.max(MIN_BRIGHTNESS_DIST_PC);
     (ev_factor * BRIGHTNESS_SCALE * luminosity_solar / (dist_pc * dist_pc)).min(MAX_STAR_BRIGHTNESS)
 }
 
@@ -102,13 +103,12 @@ const CATALOG_STARS: &[(&str, f64, f64, f64, char, f32, f32)] = &[
 ];
 
 #[derive(Component)]
-pub struct BackgroundStar;
-
-#[derive(Component)]
 pub struct Star {
-    pub luminosity_solar: f32,
     pub spectral: char,
     pub radius_solar: f32,
+    /// Visual luminosity (from HYG absolute magnitude), used for rendered brightness so these
+    /// stars match the starfield. The bolometric value in CATALOG_STARS feeds the info panel.
+    pub visual_lum: f32,
     /// Brightness last written to the material; skips GPU re-uploads for changes < 1%.
     pub last_brightness: f32,
 }
@@ -121,8 +121,26 @@ pub struct StarLabelFor(pub Entity);
 #[derive(Component)]
 pub struct LabelRange(pub f64);
 
-#[derive(Resource)]
-pub struct BackgroundStarMaterial(pub Handle<StandardMaterial>);
+/// For each curated star (CATALOG_STARS order), its index in the HYG catalog. Matched stars
+/// are left out of the starfield (no double-drawing) and take their visual luminosity from HYG.
+#[derive(Resource, Default)]
+pub struct CuratedHygMatches(pub Vec<Option<usize>>);
+
+/// Curated stars match the brightest HYG star within this angle that's brighter than
+/// MATCH_MAX_MAG as seen from the Sun.
+const MATCH_MAX_SEP_DEG: f64 = 0.3;
+const MATCH_MAX_MAG: f64 = 4.5;
+
+pub fn match_curated(catalog: &HygCatalog) -> Vec<Option<usize>> {
+    let bright = catalog.bright_indices(MATCH_MAX_MAG);
+    CATALOG_STARS
+        .iter()
+        .map(|&(_, ra, dec, dist, ..)| {
+            let dir = star_world_pos(ra, dec, dist).normalize();
+            catalog.match_direction(&bright, dir, MATCH_MAX_SEP_DEG)
+        })
+        .collect()
+}
 
 #[derive(Resource, Default)]
 pub struct ExposureSettings {
@@ -165,8 +183,14 @@ pub fn setup_stars(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut catalog: ResMut<ObjectCatalog>,
+    hyg: Res<HygCatalog>,
 ) {
-    for &(name, ra, dec, dist, spect, radius_solar, luminosity) in CATALOG_STARS {
+    let matches = match_curated(&hyg);
+    for (k, &(name, ra, dec, dist, spect, radius_solar, luminosity)) in
+        CATALOG_STARS.iter().enumerate()
+    {
+        // Unmatched stars fall back to their bolometric luminosity.
+        let visual_lum = matches[k].map_or(luminosity, |i| hyg.stars[i].lum);
         let pos = star_world_pos(ra, dec, dist);
         let radius = radius_solar as f64 * SOLAR_RADIUS_UNITS;
         let star_entity = commands
@@ -185,9 +209,9 @@ pub fn setup_stars(
                     facts: star_facts(spect, luminosity as f64, radius_solar as f64, dist),
                 },
                 Star {
-                    luminosity_solar: luminosity,
                     spectral: spect,
                     radius_solar,
+                    visual_lum,
                     last_brightness: 0.0,
                 },
             ))
@@ -211,30 +235,7 @@ pub fn setup_stars(
         catalog.0.push((name.to_string(), star_entity));
     }
 
-    let mut rng = rand::thread_rng();
-    let bg_handle = materials.add(StandardMaterial {
-        emissive: LinearRgba::new(0.07, 0.08, 0.10, 1.0),
-        ..default()
-    });
-    // Unit sphere — each instance is scaled by its distance so it subtends MIN_STAR_ANGLE.
-    let bg_mesh = meshes.add(Sphere::new(1.0));
-    // Decorative filler in a flattened disk 3-80 pc out. No BodyRadius: not navigable.
-    for _ in 0..2000 {
-        let r = rng.gen_range(3.0..80.0) * AU_PER_PC;
-        let theta = rng.gen_range(0.0..2.0 * PI);
-        let y = rng.gen_range(-5.0..5.0) * AU_PER_PC;
-        let pos = DVec3::new(r * theta.cos(), y, r * theta.sin());
-        let visual_radius = pos.length() as f32 * MIN_STAR_ANGLE;
-        commands.spawn((
-            Mesh3d(bg_mesh.clone()),
-            MeshMaterial3d(bg_handle.clone()),
-            Transform::from_scale(Vec3::splat(visual_radius)),
-            WorldPos(pos),
-            BackgroundStar,
-            Visibility::Hidden,
-        ));
-    }
-    commands.insert_resource(BackgroundStarMaterial(bg_handle));
+    commands.insert_resource(CuratedHygMatches(matches));
 }
 
 /// Recomputes star brightness and size from the camera distance. Runs only when the camera
@@ -252,7 +253,6 @@ pub fn update_star_brightness(
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
     exposure: Res<ExposureSettings>,
-    bg_mat: Res<BackgroundStarMaterial>,
 ) {
     let Ok(cam) = cam_query.single() else { return };
     if !cam.is_changed() && !exposure.is_changed() {
@@ -262,11 +262,7 @@ pub fn update_star_brightness(
 
     for (pos, mut transform, mat_handle, mut star) in star_query.iter_mut() {
         let dist_au = pos.0.distance(cam.0);
-        let brightness = star_brightness(
-            ev_factor,
-            star.luminosity_solar,
-            (dist_au / AU_PER_PC) as f32,
-        );
+        let brightness = star_brightness(ev_factor, star.visual_lum, (dist_au / AU_PER_PC) as f32);
         if (brightness / star.last_brightness.max(f32::MIN_POSITIVE) - 1.0).abs() > 0.01 {
             star.last_brightness = brightness;
             let base = spectral_color(star.spectral);
@@ -288,14 +284,6 @@ pub fn update_star_brightness(
         if transform.scale != scale {
             transform.scale = scale;
         }
-    }
-
-    // Background stars scale uniformly with exposure only.
-    if exposure.is_changed()
-        && let Some(mat) = materials.get_mut(&bg_mat.0)
-    {
-        let b = (ev_factor * 0.1).max(0.001);
-        mat.emissive = LinearRgba::new(0.7 * b, 0.8 * b, 1.0 * b, 1.0);
     }
 }
 
@@ -361,23 +349,6 @@ pub fn adjust_exposure(
     }
     if keys.just_pressed(KeyCode::BracketRight) {
         exposure.ev = (exposure.ev + 1).min(ExposureSettings::MAX_EV);
-    }
-}
-
-pub fn update_background_star_visibility(
-    show: Res<ShowBackgroundStars>,
-    mut query: Query<&mut Visibility, With<BackgroundStar>>,
-) {
-    if !show.is_changed() {
-        return;
-    }
-    let vis = if show.0 {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    };
-    for mut v in query.iter_mut() {
-        *v = vis;
     }
 }
 
@@ -543,15 +514,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_background_star_radius_proportional_to_distance() {
-        // Background stars are spawned with radius = r * MIN_STAR_ANGLE so they
-        // always subtend the minimum angle when viewed from the origin.
-        let r = 10_000.0_f32;
-        let expected_angle = r * MIN_STAR_ANGLE / r;
-        assert!((expected_angle - MIN_STAR_ANGLE).abs() < 1e-6);
-    }
-
     // --- brightness / exposure ---
 
     #[test]
@@ -569,9 +531,33 @@ mod tests {
     fn test_star_brightness_is_capped_near_a_star() {
         // Sirius from 0.06 AU (~3e-7 pc) must not blow out the screen.
         assert_eq!(star_brightness(1.0, 25.4, 3.0e-7), MAX_STAR_BRIGHTNESS);
-        // Vega from Earth keeps its calibrated value (~0.34 at EV 0).
-        let vega = star_brightness(1.0, 40.12, 7.68);
-        assert!((vega - 0.34).abs() < 0.01, "vega {vega}");
+        // Vega from Earth keeps its calibrated value (~0.34 at EV 0), using its visual
+        // luminosity from HYG as the renderer does.
+        let hyg = HygCatalog::embedded();
+        let vega_lum = hyg.stars[hyg.index_of_name("Vega").unwrap()].lum;
+        let vega = star_brightness(1.0, vega_lum, 7.68);
+        assert!(
+            (vega - 0.34).abs() < 0.02,
+            "vega {vega} (visual L {vega_lum})"
+        );
+    }
+
+    #[test]
+    fn test_every_curated_star_matches_a_distinct_hyg_star() {
+        // Unmatched curated stars would be drawn twice (sphere + starfield point).
+        let hyg = HygCatalog::embedded();
+        let matches = match_curated(&hyg);
+        let unmatched: Vec<&str> = CATALOG_STARS
+            .iter()
+            .zip(&matches)
+            .filter(|(_, m)| m.is_none())
+            .map(|(s, _)| s.0)
+            .collect();
+        assert!(unmatched.is_empty(), "unmatched: {unmatched:?}");
+        let unique: std::collections::HashSet<_> = matches.iter().flatten().collect();
+        assert_eq!(unique.len(), CATALOG_STARS.len());
+        // Spot-check: Sirius matched the HYG star named Sirius.
+        assert_eq!(matches[0], hyg.index_of_name("Sirius"));
     }
 
     #[test]
