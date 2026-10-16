@@ -45,3 +45,39 @@ pub fn cycle_speed(
         speed_state.cycle();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::{headless_app, press_key, release_key, run_frames};
+
+    fn speed_app() -> App {
+        let mut app = headless_app();
+        app.init_resource::<SpeedState>()
+            .init_resource::<Search>()
+            .init_resource::<MenuOpen>()
+            .add_systems(Update, cycle_speed);
+        app
+    }
+
+    #[test]
+    fn test_shift_tap_cycles_speed_once() {
+        let mut app = speed_app();
+        let start = app.world().resource::<SpeedState>().idx;
+        press_key(&mut app, KeyCode::ShiftLeft);
+        run_frames(&mut app, 5); // held for several frames: still one step
+        release_key(&mut app, KeyCode::ShiftLeft);
+        run_frames(&mut app, 1);
+        assert_eq!(app.world().resource::<SpeedState>().idx, start + 1);
+    }
+
+    #[test]
+    fn test_shift_ignored_while_menu_open() {
+        let mut app = speed_app();
+        app.world_mut().resource_mut::<MenuOpen>().0 = true;
+        let start = app.world().resource::<SpeedState>().idx;
+        press_key(&mut app, KeyCode::ShiftLeft);
+        run_frames(&mut app, 1);
+        assert_eq!(app.world().resource::<SpeedState>().idx, start);
+    }
+}

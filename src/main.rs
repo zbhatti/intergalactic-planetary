@@ -4,10 +4,13 @@ mod camera;
 mod constants;
 mod menu;
 mod navigation;
+mod perf;
 mod search;
 mod solar_system;
 mod speed;
 mod stars;
+#[cfg(test)]
+mod testing;
 mod ui;
 
 fn main() {
@@ -19,6 +22,7 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins(perf::PerfPlugin)
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(camera::CursorLocked(true))
         .insert_resource(camera::ScreenshotCounter::default())

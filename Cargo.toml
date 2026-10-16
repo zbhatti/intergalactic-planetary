@@ -4,7 +4,28 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.16"
+# Only the Bevy features IP uses (no audio, gamepad, glTF, scenes, sprites, animation):
+# smaller binaries, faster builds, and no alsa/udev system libraries needed on Linux.
+bevy = { version = "0.16", default-features = false, features = [
+    "std",
+    "async_executor",
+    "multi_threaded",
+    "bevy_asset",
+    "bevy_color",
+    "bevy_core_pipeline",
+    "bevy_gizmos",
+    "bevy_log",
+    "bevy_pbr",
+    "bevy_render",
+    "bevy_text",
+    "bevy_ui",
+    "bevy_window",
+    "bevy_winit",
+    "default_font",
+    "png",
+    "tonemapping_luts",
+    "x11",
+] }
 rand = "0.8"
 
 # `dev` (on by default) links Bevy dynamically for fast incremental builds.

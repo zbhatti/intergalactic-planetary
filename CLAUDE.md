@@ -28,6 +28,7 @@ The main dev machine's NVIDIA dGPU sits in a keyboard base that can overheat and
 | Engine | Bevy 0.16 | ECS architecture, wgpu backend |
 | GPU backend | Metal (macOS) / Vulkan / DX12 | wgpu picks the right one per platform |
 | Build | Cargo with `dynamic_linking` feature | Fast incremental dev builds |
+| Bevy features | Trimmed list in `Cargo.toml` (`default-features = false`) | Smaller binary, faster build; add a feature only when a system needs it |
 
 CI runs on Ubuntu, macOS (ARM), and Windows via GitHub Actions (`.github/workflows/ci.yml`), and uploads a standalone release binary per OS as the `IP-Linux` / `IP-macOS` / `IP-Windows` artifacts.
 
@@ -64,6 +65,8 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `ui.rs` | Distance/speed/exposure HUD labels, `format_distance`, `format_speed` |
 | `navigation.rs` | HUD reticle, off-screen arrow gizmo, camera auto-orient |
 | `menu.rs` | Esc pause menu, background stars toggle, quit button |
+| `perf.rs` | F3 perf overlay, `IP_BENCH` scripted benchmark mode, frame-time stats |
+| `testing.rs` | Headless test harness (test builds only): fixed 60 Hz clock, real key events |
 
 ## Controls
 
@@ -78,6 +81,8 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | Enter (in search) | Select object, orient camera toward it |
 | Esc (in search) | Close search |
 | Esc | Open/close pause menu |
+| F3 | Toggle performance overlay (fps, frame times, entity count) |
+| F12 | Save screenshot |
 | Quit button | Exit cleanly via `AppExit::Success` |
 
 ## Known gotchas and past bugs
@@ -163,6 +168,23 @@ Extend `CATALOG_STARS` in `stars.rs`. Each entry is:
 
 The star is automatically added to `ObjectCatalog` (searchable) and rendered with correct position, size, and brightness.
 
+## Iterative development workflow
+
+Each feature lands as its own PR, and each one should:
+
+1. **Test the logic headlessly.** Keep pure math in plain functions with unit tests. For behaviour
+   across frames, use `testing::headless_app()`. It runs real Bevy schedules with `MinimalPlugins`
+   and a fixed 60 Hz clock, with no window or GPU, so results are deterministic on CI. Drive input
+   with `press_key`/`release_key`; these send real `KeyboardInput` events, because setting
+   `ButtonInput` directly gets cleared in `PreUpdate` before game systems see it. Keep systems that
+   need to run headless free of render/asset parameters.
+2. **Benchmark before merging.** Run `IP_BENCH=20 cargo run --release` and append the `IP_BENCH` line
+   to `PERF.md`. For hot paths that scale with object count, add `#[ignore]` timing tests whose
+   names start with `perf_`, and record those too.
+3. **Keep it lightweight.** No new crate or Bevy feature without a reason in the PR. Prefer
+   change-detection over per-frame work, and don't touch `Assets<…>` mutably every frame for
+   every entity: each `get_mut` re-uploads that asset to the GPU.
+
 ## Running CI locally
 
 ```bash
@@ -173,4 +195,4 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 ```
 
-Linux builds additionally require: `libasound2-dev libudev-dev libxkbcommon-dev pkg-config`
+Linux builds additionally require: `libxkbcommon-dev pkg-config`. (Audio and gamepad support are compiled out, so `libasound2-dev`/`libudev-dev` are no longer needed.)
