@@ -2,6 +2,7 @@ use bevy::{
     core_pipeline::bloom::Bloom,
     input::mouse::MouseMotion,
     prelude::*,
+    render::view::screenshot::{save_to_disk, Screenshot},
     window::CursorGrabMode,
 };
 use crate::constants::C_AU_PER_S;
@@ -68,6 +69,24 @@ pub fn mouse_look(
             0.0,
         );
     }
+}
+
+#[derive(Resource, Default)]
+pub struct ScreenshotCounter(u32);
+
+pub fn take_screenshot(
+    mut commands: Commands,
+    mut counter: ResMut<ScreenshotCounter>,
+    keys: Res<ButtonInput<KeyCode>>,
+) {
+    if !keys.just_pressed(KeyCode::F12) {
+        return;
+    }
+    counter.0 += 1;
+    let path = format!("screenshot_{:04}.png", counter.0);
+    commands
+        .spawn(Screenshot::primary_window())
+        .observe(save_to_disk(path));
 }
 
 pub fn fly_camera(

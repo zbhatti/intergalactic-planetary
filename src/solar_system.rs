@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use crate::constants::KM_PER_AU;
 use crate::search::ObjectCatalog;
+use crate::stars::StarLabelFor;
 
 pub fn setup_solar_system(
     mut commands: Commands,
@@ -38,10 +39,19 @@ pub fn setup_solar_system(
             })
         };
 
-        commands.spawn((
+        let body_entity = commands.spawn((
             Mesh3d(meshes.add(Sphere::new(radius_au))),
             MeshMaterial3d(mat),
             Transform::from_translation(pos),
+        )).id();
+
+        commands.spawn((
+            StarLabelFor(body_entity),
+            Text::new(name),
+            TextFont { font_size: 13.0, ..default() },
+            TextColor(Color::srgba(1.0, 0.9, 0.7, 0.85)),
+            Node { position_type: PositionType::Absolute, ..default() },
+            Visibility::Hidden,
         ));
 
         catalog.0.push((name.to_string(), pos));

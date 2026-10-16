@@ -9,6 +9,10 @@ pub struct MenuOpen(pub bool);
 #[derive(Resource, Default)]
 pub struct ShowBackgroundStars(pub bool);
 
+/// Whether catalog star name labels are shown. Off by default.
+#[derive(Resource, Default)]
+pub struct ShowStarLabels(pub bool);
+
 #[derive(Component)]
 pub struct PauseMenu;
 
@@ -20,6 +24,34 @@ pub struct BgStarsButton;
 
 #[derive(Component)]
 pub struct BgStarsLabel;
+
+#[derive(Component)]
+pub struct StarLabelsButton;
+
+#[derive(Component)]
+pub struct StarLabelsLabel;
+
+fn checkbox_button(p: &mut ChildSpawnerCommands, marker: impl Bundle, label_marker: impl Bundle, text: &str) {
+    p.spawn((
+        marker,
+        Button,
+        Node {
+            width: Val::Percent(100.0),
+            padding: UiRect::axes(Val::Px(12.0), Val::Px(10.0)),
+            justify_content: JustifyContent::FlexStart,
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.18, 0.18, 0.28)),
+    ))
+    .with_children(|b| {
+        b.spawn((
+            label_marker,
+            Text::new(text),
+            TextFont { font_size: 17.0, ..default() },
+            TextColor(Color::srgb(0.85, 0.85, 0.85)),
+        ));
+    });
+}
 
 pub fn setup_pause_menu(mut commands: Commands) {
     commands
@@ -46,25 +78,8 @@ pub fn setup_pause_menu(mut commands: Commands) {
                 TextColor(Color::WHITE),
             ));
 
-            p.spawn((
-                BgStarsButton,
-                Button,
-                Node {
-                    width: Val::Percent(100.0),
-                    padding: UiRect::axes(Val::Px(12.0), Val::Px(10.0)),
-                    justify_content: JustifyContent::FlexStart,
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.18, 0.18, 0.28)),
-            ))
-            .with_children(|b| {
-                b.spawn((
-                    BgStarsLabel,
-                    Text::new("[ ] Background stars"),
-                    TextFont { font_size: 17.0, ..default() },
-                    TextColor(Color::srgb(0.85, 0.85, 0.85)),
-                ));
-            });
+            checkbox_button(p, BgStarsButton, BgStarsLabel, "[ ] Background stars");
+            checkbox_button(p, StarLabelsButton, StarLabelsLabel, "[ ] Star labels");
 
             p.spawn((
                 QuitButton,
@@ -125,43 +140,54 @@ pub fn update_pause_menu_visibility(
 
 pub fn handle_menu_buttons(
     mut interaction_query: Query<
-        (&Interaction, &mut BackgroundColor, Option<&QuitButton>, Option<&BgStarsButton>),
+        (
+            &Interaction,
+            &mut BackgroundColor,
+            Option<&QuitButton>,
+            Option<&BgStarsButton>,
+            Option<&StarLabelsButton>,
+        ),
         (Changed<Interaction>, With<Button>),
     >,
     mut bg_stars: ResMut<ShowBackgroundStars>,
+    mut star_labels: ResMut<ShowStarLabels>,
     mut exit: EventWriter<AppExit>,
     menu_open: Res<MenuOpen>,
-    mut label_query: Query<&mut Text, With<BgStarsLabel>>,
+    mut bg_label_query: Query<&mut Text, (With<BgStarsLabel>, Without<StarLabelsLabel>)>,
+    mut sl_label_query: Query<&mut Text, (With<StarLabelsLabel>, Without<BgStarsLabel>)>,
 ) {
     if !menu_open.0 {
         return;
     }
-    for (interaction, mut color, quit, bg_btn) in interaction_query.iter_mut() {
+    for (interaction, mut color, quit, bg_btn, sl_btn) in interaction_query.iter_mut() {
+        let is_quit = quit.is_some();
         match *interaction {
             Interaction::Pressed => {
-                if quit.is_some() {
+                if is_quit {
                     exit.write(AppExit::Success);
                 }
                 if bg_btn.is_some() {
                     bg_stars.0 = !bg_stars.0;
-                    if let Ok(mut text) = label_query.single_mut() {
-                        text.0 = if bg_stars.0 {
-                            "[x] Background stars".to_string()
-                        } else {
-                            "[ ] Background stars".to_string()
-                        };
+                    if let Ok(mut text) = bg_label_query.single_mut() {
+                        text.0 = checkbox_text("Background stars", bg_stars.0);
+                    }
+                }
+                if sl_btn.is_some() {
+                    star_labels.0 = !star_labels.0;
+                    if let Ok(mut text) = sl_label_query.single_mut() {
+                        text.0 = checkbox_text("Star labels", star_labels.0);
                     }
                 }
             }
             Interaction::Hovered => {
-                *color = BackgroundColor(if quit.is_some() {
+                *color = BackgroundColor(if is_quit {
                     Color::srgb(0.60, 0.12, 0.12)
                 } else {
                     Color::srgb(0.26, 0.26, 0.38)
                 });
             }
             Interaction::None => {
-                *color = BackgroundColor(if quit.is_some() {
+                *color = BackgroundColor(if is_quit {
                     Color::srgb(0.40, 0.08, 0.08)
                 } else {
                     Color::srgb(0.18, 0.18, 0.28)
@@ -171,18 +197,46 @@ pub fn handle_menu_buttons(
     }
 }
 
+fn checkbox_text(label: &str, checked: bool) -> String {
+    if checked {
+        format!("[x] {}", label)
+    } else {
+        format!("[ ] {}", label)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_background_stars_off_by_default() {
-        // Background stars must start hidden so the menu checkbox is accurate.
         assert!(!ShowBackgroundStars::default().0);
+    }
+
+    #[test]
+    fn test_star_labels_off_by_default() {
+        assert!(!ShowStarLabels::default().0);
     }
 
     #[test]
     fn test_menu_closed_by_default() {
         assert!(!MenuOpen::default().0);
+    }
+
+    #[test]
+    fn test_checkbox_text_checked() {
+        assert_eq!(checkbox_text("Star labels", true), "[x] Star labels");
+    }
+
+    #[test]
+    fn test_checkbox_text_unchecked() {
+        assert_eq!(checkbox_text("Star labels", false), "[ ] Star labels");
+    }
+
+    #[test]
+    fn test_checkbox_text_is_ascii_only() {
+        assert!(checkbox_text("Background stars", true).is_ascii());
+        assert!(checkbox_text("Background stars", false).is_ascii());
     }
 }

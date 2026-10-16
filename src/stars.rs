@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use rand::Rng;
 use std::f32::consts::PI;
 use crate::camera::FlyCam;
-use crate::menu::ShowBackgroundStars;
+use crate::menu::{ShowBackgroundStars, ShowStarLabels};
 use crate::search::{ObjectCatalog, Search};
 
 pub const PARSEC_TO_UNITS: f32 = 1000.0;
@@ -89,6 +89,10 @@ pub struct Star {
     pub radius_solar: f32,
 }
 
+/// Links a UI text label entity back to the catalog star it tracks.
+#[derive(Component)]
+pub struct StarLabelFor(pub Entity);
+
 #[derive(Resource)]
 pub struct BackgroundStarMaterial(pub Handle<StandardMaterial>);
 
@@ -145,7 +149,7 @@ pub fn setup_stars(
     for &(name, ra, dec, dist, spect, radius_solar, luminosity) in CATALOG_STARS {
         let pos = star_world_pos(ra, dec, dist);
         let radius = radius_solar * SOLAR_RADIUS_UNITS;
-        commands.spawn((
+        let star_entity = commands.spawn((
             Mesh3d(meshes.add(Sphere::new(radius))),
             MeshMaterial3d(materials.add(StandardMaterial {
                 emissive: spectral_color(spect),
@@ -153,7 +157,20 @@ pub fn setup_stars(
             })),
             Transform::from_translation(pos),
             Star { luminosity_solar: luminosity, spectral: spect, radius_solar },
+        )).id();
+
+        commands.spawn((
+            StarLabelFor(star_entity),
+            Text::new(name),
+            TextFont { font_size: 13.0, ..default() },
+            TextColor(Color::srgba(1.0, 0.9, 0.7, 0.85)),
+            Node {
+                position_type: PositionType::Absolute,
+                ..default()
+            },
+            Visibility::Hidden,
         ));
+
         catalog.0.push((name.to_string(), pos));
     }
 
@@ -224,6 +241,41 @@ pub fn update_star_brightness(
 /// MIN_STAR_ANGLE regardless of distance, while preserving physical size up close.
 pub fn star_visual_radius(physical_radius: f32, cam_dist_units: f32) -> f32 {
     physical_radius.max(cam_dist_units * MIN_STAR_ANGLE)
+}
+
+pub fn update_star_labels(
+    show: Res<ShowStarLabels>,
+    cam_query: Query<(&Camera, &GlobalTransform), With<FlyCam>>,
+    star_query: Query<&GlobalTransform>,
+    mut label_query: Query<(&StarLabelFor, &mut Node, &mut Visibility)>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+) {
+    let Ok((camera, cam_transform)) = cam_query.single() else { return };
+    let vp = windows.single().map(|w| Vec2::new(w.width(), w.height())).unwrap_or(Vec2::new(1280.0, 720.0));
+
+    for (label_for, mut node, mut vis) in label_query.iter_mut() {
+        if !show.0 {
+            *vis = Visibility::Hidden;
+            continue;
+        }
+        let Ok(star_gt) = star_query.get(label_for.0) else {
+            *vis = Visibility::Hidden;
+            continue;
+        };
+        let on_screen = camera
+            .world_to_viewport(cam_transform, star_gt.translation())
+            .map(|sp| sp.x >= 0.0 && sp.x <= vp.x && sp.y >= 0.0 && sp.y <= vp.y)
+            .unwrap_or(false);
+
+        if on_screen {
+            let screen_pos = camera.world_to_viewport(cam_transform, star_gt.translation()).unwrap();
+            *vis = Visibility::Visible;
+            node.left = Val::Px(screen_pos.x + 8.0);
+            node.top = Val::Px(screen_pos.y - 8.0);
+        } else {
+            *vis = Visibility::Hidden;
+        }
+    }
 }
 
 pub fn adjust_exposure(

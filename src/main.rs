@@ -21,6 +21,7 @@ fn main() {
         }))
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(camera::CursorLocked(true))
+        .insert_resource(camera::ScreenshotCounter::default())
         .insert_resource(AmbientLight {
             color: Color::WHITE,
             brightness: 200.0,
@@ -32,6 +33,7 @@ fn main() {
         .insert_resource(stars::ExposureSettings::default())
         .insert_resource(menu::MenuOpen::default())
         .insert_resource(menu::ShowBackgroundStars::default())
+        .insert_resource(menu::ShowStarLabels::default())
         .add_systems(
             Startup,
             (
@@ -63,8 +65,10 @@ fn main() {
                 ui::update_speed_label,
                 ui::update_exposure_label,
                 stars::update_star_brightness,
+                stars::update_star_labels,
                 camera::fly_camera,
                 camera::mouse_look,
+                camera::take_screenshot,
                 navigation::draw_offscreen_arrow,
             ),
         )
