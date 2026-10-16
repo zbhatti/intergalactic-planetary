@@ -83,7 +83,9 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `speed.rs` | Distance-adaptive speed (`CurrentSpeed`), Shift-to-cycle throttle |
 | `orbit.rs` | Reference frames (equatorial/ecliptic → world), Kepler solver, `Elements`, `SCENE_JD` |
 | `solar_system.rs` | Sun, 8 planets, 5 dwarf planets, 21 major moons from JPL elements; min apparent size for bodies |
-| `stars.rs` | 58-star catalog, `star_world_pos`, brightness model, dynamic scaling |
+| `stars.rs` | 58 curated sphere stars (matched to HYG for visual luminosity), `star_world_pos`, brightness model, dynamic scaling |
+| `hyg.rs` | Embedded HYG catalog (`data/hyg_stars.bin`): little-endian parser, magnitudes, direction matching |
+| `starfield.rs` + `starfield.wgsl` | 109k HYG stars as billboard meshes in 200 pc chunks (one draw each); shader brightness/size = same model as `stars.rs`; nearest-catalog-star scan |
 | `ui.rs` | Distance/speed/exposure HUD labels, `format_distance`, `format_speed` |
 | `navigation.rs` | HUD reticle, off-screen arrow gizmo, camera auto-orient |
 | `menu.rs` | Esc pause menu, background stars toggle, quit button |
@@ -152,9 +154,15 @@ pub const C_AU_PER_S: f64 = 299_792.458 / KM_PER_AU; // ≈ 0.002004 AU/s
 
 `format_speed` switches to km/s only below 0.01c (~0.00002 AU/s). Passing 0.001 AU/s gives `"0.4990c"`, not km/s — this tripped up a test and is the expected behavior.
 
-### 6. Background stars are hidden by default
+### 6. The starfield is real catalog data, on by default
 
-`ShowBackgroundStars` defaults to `false`. Background star entities spawn with `Visibility::Hidden`. The pause menu checkbox reflects this. If you change the default, also update the menu label initialization and the test `test_background_stars_off_by_default`.
+The old 2,000 random background stars are gone. The pause-menu toggle now shows or hides the HYG starfield
+(`ShowCatalogStars`, default `true`, test `test_catalog_stars_on_by_default`). The 58 curated stars are matched to
+HYG entries by direction (`match_curated`, test `test_every_curated_star_matches_a_distinct_hyg_star`) and left
+out of the starfield, so they're never drawn twice. All rendered brightness uses **visual** luminosity
+(HYG `lum`). The curated table's luminosity is bolometric and only feeds the info panel. Starfield shader
+constants come from Rust as uniforms (`StarfieldParams::new`), so keep them in one place: don't hard-code numbers
+in `starfield.wgsl`. Data license: CC BY-SA 4.0, see `DATA_LICENSES.md`. Keep the pause-menu credit.
 
 ### 7. Query conflicts between camera and star transforms
 
@@ -231,5 +239,7 @@ cargo test --all-targets
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 ```
+
+To regenerate the star catalog: `python3 -I tools/build_hyg.py <hyg_v44.csv.gz> data/hyg_stars.bin`.
 
 Linux builds additionally require: `libxkbcommon-dev pkg-config`. (Audio and gamepad support are compiled out, so `libasound2-dev`/`libudev-dev` are no longer needed.)

@@ -63,3 +63,7 @@ cargo test
 ```
 
 42 unit tests cover coordinate conversion (`star_world_pos`), distance/speed formatting, catalog string matching, and camera yaw/pitch derivation.
+
+## Data
+
+Star positions come from the [HYG Database](https://codeberg.org/astronexus/hyg) v4.4 (c) astronexus.com, CC BY-SA 4.0. Solar system orbits come from NASA/JPL. See [DATA_LICENSES.md](DATA_LICENSES.md).

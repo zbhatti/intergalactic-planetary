@@ -8,7 +8,7 @@
 use crate::camera::FlyCam;
 use crate::coords::{BodyRadius, NavSet, WorldPos};
 use crate::goto::{Flight, GoTo};
-use crate::menu::{ShowBackgroundStars, ShowStarLabels};
+use crate::menu::{ShowCatalogStars, ShowStarLabels};
 use crate::search::{ObjectCatalog, Search};
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
@@ -40,6 +40,9 @@ pub struct Bench {
     pub tour_idx: usize,
     /// Go-to targets, looped. `IP_BENCH_TOUR=Saturn,Titan` overrides [`BENCH_TOUR`].
     pub tour: Vec<String>,
+    /// `IP_BENCH_LOOK=Betelgeuse`: stay home and just turn toward this object (no tour),
+    /// for screenshots of the sky as seen from the solar system.
+    pub look: Option<String>,
 }
 
 impl Bench {
@@ -55,6 +58,7 @@ impl Bench {
             tour: std::env::var("IP_BENCH_TOUR")
                 .map(|t| t.split(',').map(|n| n.trim().to_string()).collect())
                 .unwrap_or_else(|_| BENCH_TOUR.iter().map(|n| n.to_string()).collect()),
+            look: std::env::var("IP_BENCH_LOOK").ok(),
         })
     }
 }
@@ -148,7 +152,7 @@ pub fn update_perf_overlay(
     }
 }
 
-/// Benchmark setup: worst-case visibility (all labels and background stars on).
+/// Benchmark setup: worst-case visibility (all labels and the catalog starfield on).
 /// Keys `IP_BENCH_KEYS` can press at startup (e.g. `IP_BENCH_KEYS=B,I`), to put UI panels
 /// in the benchmark screenshot.
 pub fn bench_key(name: &str) -> Option<KeyCode> {
@@ -156,12 +160,13 @@ pub fn bench_key(name: &str) -> Option<KeyCode> {
         "B" => KeyCode::KeyB,
         "I" => KeyCode::KeyI,
         "F3" => KeyCode::F3,
+        "Esc" => KeyCode::Escape,
         _ => return None,
     })
 }
 
 pub fn bench_setup(
-    mut bg: ResMut<ShowBackgroundStars>,
+    mut bg: ResMut<ShowCatalogStars>,
     mut labels: ResMut<ShowStarLabels>,
     mut overlay: ResMut<ShowPerfOverlay>,
     mut keys: EventWriter<KeyboardInput>,
@@ -191,15 +196,32 @@ pub fn bench_drive_camera(
     catalog: Res<ObjectCatalog>,
     mut search: ResMut<Search>,
     mut goto: ResMut<GoTo>,
-    cam: Query<(&WorldPos, &Transform), With<FlyCam>>,
-    targets: Query<(&WorldPos, &BodyRadius)>,
+    mut cam: Query<(&mut WorldPos, &Transform), With<FlyCam>>,
+    targets: Query<(&WorldPos, &BodyRadius), Without<FlyCam>>,
 ) {
+    let Ok((mut look_from, cam_t)) = cam.single_mut() else {
+        return;
+    };
+    if let Some(name) = bench.look.take() {
+        bench.tour.clear();
+        let Some(&(_, entity)) = catalog.0.iter().find(|(n, _)| *n == name) else {
+            return;
+        };
+        let Ok((target_pos, _)) = targets.get(entity) else {
+            return;
+        };
+        // Stand 1 AU from the Sun on the target's side, so the Sun is behind the camera.
+        // (1 AU of parallax is invisible at stellar distances.)
+        look_from.0 = target_pos.0.normalize_or_zero() * 1.0;
+        search.target = Some(entity);
+        search.target_name = Some(name);
+        search.should_orient = true;
+        return;
+    }
     if goto.is_active() {
         return;
     }
-    let Ok((cam_pos, cam_t)) = cam.single() else {
-        return;
-    };
+    let cam_pos = *look_from;
     if bench.tour.is_empty() {
         return;
     }
