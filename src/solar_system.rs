@@ -173,6 +173,13 @@ pub fn update_body_visual_size(
     }
 }
 
+/// What a body orbits, and its semi-major axis there (AU). Drives the solar system browser.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct OrbitOf {
+    pub primary: Entity,
+    pub a_au: f64,
+}
+
 struct Spawner<'a, 'w, 's> {
     commands: &'a mut Commands<'w, 's>,
     meshes: &'a mut Assets<Mesh>,
@@ -187,6 +194,7 @@ impl Spawner<'_, '_, '_> {
         material: Handle<StandardMaterial>,
         info: BodyInfo,
         label_range: Option<f64>,
+        orbit: Option<OrbitOf>,
     ) -> Entity {
         let radius_au = radius_km / KM_PER_AU;
         let name = info.name.clone();
@@ -201,6 +209,9 @@ impl Spawner<'_, '_, '_> {
         ));
         if let Some(range) = label_range {
             entity.insert(LabelRange(range));
+        }
+        if let Some(orbit) = orbit {
+            entity.insert(orbit);
         }
         let entity = entity.id();
         self.commands.spawn((
@@ -243,7 +254,8 @@ pub fn setup_solar_system(
         meshes: &mut meshes,
         catalog: &mut catalog,
     };
-    let mut positions: Vec<(&str, DVec3)> = Vec::new();
+    // (name, world position, entity) of everything spawned so far, for parenting.
+    let mut spawned: Vec<(&str, DVec3, Entity)> = Vec::new();
 
     let sun_mat = materials.add(StandardMaterial {
         emissive: LinearRgba::new(2.0, 1.5, 0.5, 1.0),
@@ -251,7 +263,7 @@ pub fn setup_solar_system(
     });
     let mut sun_facts = physical_facts(1.989e30, 695_700.0);
     sun_facts.push(("Temperature", "5772 K".to_string()));
-    sp.body(
+    let sun = sp.body(
         DVec3::ZERO,
         695_700.0,
         sun_mat,
@@ -261,8 +273,9 @@ pub fn setup_solar_system(
             facts: sun_facts,
         },
         None,
+        None,
     );
-    positions.push(("Sun", DVec3::ZERO));
+    spawned.push(("Sun", DVec3::ZERO, sun));
 
     for &(name, base, rates, radius_km, mass_kg, temp_k, [r, g, b]) in PLANETS {
         let el = planet_elements(base, rates, SCENE_JD);
@@ -279,7 +292,7 @@ pub fn setup_solar_system(
             base_color: Color::srgb(r, g, b),
             ..default()
         });
-        sp.body(
+        let e = sp.body(
             pos,
             radius_km,
             mat,
@@ -289,8 +302,12 @@ pub fn setup_solar_system(
                 facts,
             },
             None,
+            Some(OrbitOf {
+                primary: sun,
+                a_au: el.a_au,
+            }),
         );
-        positions.push((name, pos));
+        spawned.push((name, pos, e));
     }
 
     let dwarf_mat = materials.add(StandardMaterial {
@@ -317,7 +334,7 @@ pub fn setup_solar_system(
             "Orbital period",
             format!("{} years", format_sig(period / 365.25)),
         ));
-        sp.body(
+        let e = sp.body(
             pos,
             radius_km,
             dwarf_mat.clone(),
@@ -327,8 +344,12 @@ pub fn setup_solar_system(
                 facts,
             },
             None,
+            Some(OrbitOf {
+                primary: sun,
+                a_au: a,
+            }),
         );
-        positions.push((name, pos));
+        spawned.push((name, pos, e));
     }
 
     let moon_mat = materials.add(StandardMaterial {
@@ -336,7 +357,8 @@ pub fn setup_solar_system(
         ..default()
     });
     for &(name, parent, a_km, e, peri, m0, i, node, period, pole, radius_km, mass_kg) in MOONS {
-        let Some(&(_, parent_pos)) = positions.iter().find(|(n, _)| *n == parent) else {
+        let Some(&(_, parent_pos, parent_entity)) = spawned.iter().find(|(n, _, _)| *n == parent)
+        else {
             continue;
         };
         let a_au = a_km / KM_PER_AU;
@@ -368,6 +390,10 @@ pub fn setup_solar_system(
                 facts,
             },
             Some(a_au * MOON_LABEL_RANGE_ORBITS),
+            Some(OrbitOf {
+                primary: parent_entity,
+                a_au,
+            }),
         );
     }
 }

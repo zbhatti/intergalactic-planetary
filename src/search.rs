@@ -46,6 +46,8 @@ pub fn setup_search_ui(mut commands: Commands) {
             },
             BackgroundColor(Color::srgba(0.0, 0.0, 0.12, 0.88)),
             Visibility::Hidden,
+            // Panels draw above world-space object labels.
+            GlobalZIndex(10),
         ))
         .with_children(|p| {
             p.spawn((
@@ -74,7 +76,12 @@ pub fn handle_search(
     mut search: ResMut<Search>,
     catalog: Res<ObjectCatalog>,
     menu_open: Res<MenuOpen>,
+    browser: Option<Res<crate::browser::Browser>>,
 ) {
+    if browser.is_some_and(|b| b.open) {
+        key_events.clear();
+        return;
+    }
     for event in key_events.read() {
         if event.state != ButtonState::Pressed {
             continue;

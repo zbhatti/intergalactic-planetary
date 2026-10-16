@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use coords::NavSet;
 
+mod browser;
 mod camera;
 mod constants;
 mod coords;
@@ -31,6 +32,7 @@ fn main() {
             coords::CoordsPlugin,
             goto::GoToPlugin,
             info::InfoPlugin,
+            browser::BrowserPlugin,
             perf::PerfPlugin,
         ))
         .insert_resource(ClearColor(Color::BLACK))

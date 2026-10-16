@@ -10,6 +10,8 @@ use crate::coords::{BodyRadius, NavSet, WorldPos};
 use crate::goto::{Flight, GoTo};
 use crate::menu::{ShowBackgroundStars, ShowStarLabels};
 use crate::search::{ObjectCatalog, Search};
+use bevy::input::ButtonState;
+use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use std::time::Instant;
@@ -147,14 +149,37 @@ pub fn update_perf_overlay(
 }
 
 /// Benchmark setup: worst-case visibility (all labels and background stars on).
+/// Keys `IP_BENCH_KEYS` can press at startup (e.g. `IP_BENCH_KEYS=B,I`), to put UI panels
+/// in the benchmark screenshot.
+pub fn bench_key(name: &str) -> Option<KeyCode> {
+    Some(match name {
+        "B" => KeyCode::KeyB,
+        "I" => KeyCode::KeyI,
+        "F3" => KeyCode::F3,
+        _ => return None,
+    })
+}
+
 pub fn bench_setup(
     mut bg: ResMut<ShowBackgroundStars>,
     mut labels: ResMut<ShowStarLabels>,
     mut overlay: ResMut<ShowPerfOverlay>,
+    mut keys: EventWriter<KeyboardInput>,
 ) {
     bg.0 = true;
     labels.0 = true;
     overlay.0 = true;
+    let names = std::env::var("IP_BENCH_KEYS").unwrap_or_default();
+    for key_code in names.split(',').filter_map(|n| bench_key(n.trim())) {
+        keys.write(KeyboardInput {
+            key_code,
+            logical_key: Key::Unidentified(NativeKey::Unidentified),
+            state: ButtonState::Pressed,
+            text: None,
+            repeat: false,
+            window: Entity::PLACEHOLDER,
+        });
+    }
 }
 
 /// Benchmark tour: go-to flights spanning planet, interplanetary and interstellar scales,

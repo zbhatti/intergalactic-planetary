@@ -180,8 +180,10 @@ pub fn setup_info_ui(mut commands: Commands) {
             padding: UiRect::all(Val::Px(10.0)),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.1, 0.7)),
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.1, 0.94)),
         Visibility::Hidden,
+        // Panels draw above world-space object labels.
+        GlobalZIndex(10),
     ));
     commands.spawn((
         Crosshair,

@@ -122,8 +122,9 @@ pub fn toggle_menu(
     mut menu_open: ResMut<MenuOpen>,
     mut locked: ResMut<CursorLocked>,
     mut windows: Query<&mut Window>,
+    browser: Res<crate::browser::Browser>,
 ) {
-    if search.active {
+    if search.active || browser.open {
         return;
     }
     if keys.just_pressed(KeyCode::Escape) {
