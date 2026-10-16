@@ -7,6 +7,7 @@ mod constants;
 mod coords;
 mod goto;
 mod hyg;
+mod hyg_bodies;
 mod info;
 mod menu;
 mod navigation;
@@ -36,6 +37,7 @@ fn main() {
             info::InfoPlugin,
             browser::BrowserPlugin,
             starfield::StarfieldPlugin,
+            hyg_bodies::HygBodiesPlugin,
             perf::PerfPlugin,
         ))
         .insert_resource(ClearColor(Color::BLACK))

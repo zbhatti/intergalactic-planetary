@@ -57,6 +57,9 @@ mod params {
         pub min_dist_pc: f32,
         pub fade_near_au: f32,
         pub fade_far_au: f32,
+        /// Render-space position (xyz) and radius (w, AU) of a sphere whose points are hidden
+        /// (the star currently drawn as a close-range proxy). w = 0: nothing hidden.
+        pub hide: bevy::math::Vec4,
     }
 }
 
@@ -71,6 +74,7 @@ impl StarfieldParams {
             min_dist_pc: crate::stars::MIN_BRIGHTNESS_DIST_PC,
             fade_near_au: FADE_NEAR_AU,
             fade_far_au: FADE_FAR_AU,
+            hide: Vec4::ZERO,
         }
     }
 }
@@ -88,6 +92,12 @@ impl Material for StarfieldMaterial {
 
     fn fragment_shader() -> ShaderRef {
         STARFIELD_SHADER.into()
+    }
+
+    /// Starlight adds up: overlapping stars brighten, and dim or hidden points contribute
+    /// nothing instead of drawing black disks over whatever is behind them.
+    fn alpha_mode(&self) -> AlphaMode {
+        AlphaMode::Add
     }
 
     fn specialize(
@@ -115,8 +125,11 @@ pub struct StarfieldChunk;
 #[derive(Resource, Default)]
 pub struct StarPoints {
     pub positions: Vec<DVec3>,
+    /// HYG catalog index of each entry in `positions`.
+    pub indices: Vec<usize>,
+    /// Nearest rendered catalog star to the camera: (HYG index, center distance AU).
+    pub nearest: Option<(usize, f64)>,
     last_camera: Option<DVec3>,
-    last_nearest: f64,
 }
 
 /// Groups star indices into cubic chunks of `chunk_au` (AU), skipping `skip`.
@@ -191,9 +204,13 @@ pub fn setup_starfield(
             WorldPos(center),
         ));
     }
-    points.positions = (0..catalog.stars.len())
+    points.indices = (0..catalog.stars.len())
         .filter(|i| !skip.contains(i))
-        .map(|i| catalog.stars[i].pos)
+        .collect();
+    points.positions = points
+        .indices
+        .iter()
+        .map(|&i| catalog.stars[i].pos)
         .collect();
     info!(
         "starfield: {} stars in {} chunks",
@@ -239,17 +256,19 @@ pub fn nearest_catalog_star(
 ) {
     let Ok(cam) = cam.single() else { return };
     if points.last_camera != Some(cam.0) {
-        let d = points
+        let best = points
             .positions
             .iter()
-            .map(|p| p.distance_squared(cam.0))
-            .fold(f64::INFINITY, f64::min)
-            .sqrt();
-        points.last_nearest = d;
+            .enumerate()
+            .map(|(k, p)| (k, p.distance_squared(cam.0)))
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        points.nearest = best.map(|(k, d2)| (points.indices[k], d2.sqrt()));
         points.last_camera = Some(cam.0);
     }
-    if points.last_nearest < nearest.surface_dist {
-        nearest.surface_dist = points.last_nearest;
+    if let Some((_, d)) = points.nearest
+        && d < nearest.surface_dist
+    {
+        nearest.surface_dist = d;
     }
 }
 
