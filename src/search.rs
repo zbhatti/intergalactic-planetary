@@ -177,6 +177,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_search_flow_selects_target_headless() {
+        use crate::testing::{headless_app, tap_logical, type_text};
+        let mut app = headless_app();
+        let sirius = app.world_mut().spawn_empty().id();
+        let sun = app.world_mut().spawn_empty().id();
+        app.insert_resource(ObjectCatalog(vec![
+            ("Sun".to_string(), sun),
+            ("Sirius".to_string(), sirius),
+        ]))
+        .init_resource::<Search>()
+        .init_resource::<MenuOpen>()
+        .add_systems(Update, handle_search);
+
+        tap_logical(&mut app, Key::Enter);
+        assert!(app.world().resource::<Search>().active);
+        type_text(&mut app, "sir");
+        tap_logical(&mut app, Key::Enter);
+
+        let search = app.world().resource::<Search>();
+        assert!(!search.active);
+        assert_eq!(search.target, Some(sirius));
+        assert_eq!(search.target_name.as_deref(), Some("Sirius"));
+        assert!(search.should_orient);
+    }
+
+    #[test]
     fn test_case_insensitive_match() {
         let catalog = ObjectCatalog(vec![
             ("Earth".to_string(), Entity::PLACEHOLDER),
