@@ -8,6 +8,7 @@ mod goto;
 mod info;
 mod menu;
 mod navigation;
+mod orbit;
 mod perf;
 mod search;
 mod solar_system;
@@ -93,6 +94,7 @@ fn main() {
             Update,
             (
                 stars::update_star_brightness,
+                solar_system::update_body_visual_size,
                 stars::update_star_labels,
                 navigation::update_target_reticle,
                 navigation::draw_offscreen_arrow,

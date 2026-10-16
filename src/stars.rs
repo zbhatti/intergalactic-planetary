@@ -3,6 +3,7 @@ use crate::constants::{AU_PER_PC, KM_PER_AU};
 use crate::coords::{BodyRadius, WorldPos, view_transform};
 use crate::info::{BodyInfo, BodyKind, star_facts};
 use crate::menu::{ShowBackgroundStars, ShowStarLabels};
+use crate::orbit::{equatorial_to_world, radec_to_equatorial};
 use crate::search::{ObjectCatalog, Search};
 use bevy::math::DVec3;
 use bevy::prelude::*;
@@ -28,7 +29,7 @@ pub fn star_brightness(ev_factor: f32, luminosity_solar: f32, dist_pc: f32) -> f
 
 // Stars are scaled up dynamically so their angular diameter is at least this many radians.
 // ~0.002 rad ≈ 0.11° ≈ 2-3 pixels at a typical FOV, ensuring sub-pixel stars are always visible.
-const MIN_STAR_ANGLE: f32 = 0.002;
+pub const MIN_STAR_ANGLE: f32 = 0.002;
 
 // (name, RA hours, Dec deg, dist pc, spectral, radius solar radii, luminosity solar)
 const CATALOG_STARS: &[(&str, f64, f64, f64, char, f32, f32)] = &[
@@ -116,6 +117,10 @@ pub struct Star {
 #[derive(Component)]
 pub struct StarLabelFor(pub Entity);
 
+/// On a labelled body: only show its label when the camera is within this many AU.
+#[derive(Component)]
+pub struct LabelRange(pub f64);
+
 #[derive(Resource)]
 pub struct BackgroundStarMaterial(pub Handle<StandardMaterial>);
 
@@ -152,14 +157,7 @@ pub fn spectral_color(class: char) -> LinearRgba {
 
 /// Equatorial RA/Dec/distance to heliocentric world position in AU.
 pub fn star_world_pos(ra_hours: f64, dec_deg: f64, dist_pc: f64) -> DVec3 {
-    let ra = ra_hours * 15.0 * PI / 180.0;
-    let dec = dec_deg * PI / 180.0;
-    let d = dist_pc * AU_PER_PC;
-    DVec3::new(
-        d * dec.cos() * ra.cos(),
-        d * dec.sin(),
-        d * dec.cos() * ra.sin(),
-    )
+    equatorial_to_world(radec_to_equatorial(ra_hours * 15.0, dec_deg)) * dist_pc * AU_PER_PC
 }
 
 pub fn setup_stars(
@@ -310,7 +308,7 @@ pub fn star_visual_radius(physical_radius: f32, cam_dist_units: f32) -> f32 {
 pub fn update_star_labels(
     show: Res<ShowStarLabels>,
     cam_query: Query<(&Camera, &WorldPos, &Transform), With<FlyCam>>,
-    positions: Query<&WorldPos>,
+    positions: Query<(&WorldPos, Option<&LabelRange>)>,
     mut label_query: Query<(&StarLabelFor, &mut Node, &mut Visibility)>,
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
 ) {
@@ -328,7 +326,10 @@ pub fn update_star_labels(
             vis.set_if_neq(Visibility::Hidden);
             continue;
         }
-        let screen = positions.get(label_for.0).ok().and_then(|pos| {
+        let screen = positions.get(label_for.0).ok().and_then(|(pos, range)| {
+            if range.is_some_and(|r| pos.0.distance(cam_pos.0) > r.0) {
+                return None;
+            }
             camera
                 .world_to_viewport(&view, (pos.0 - cam_pos.0).as_vec3())
                 .ok()
@@ -401,11 +402,12 @@ mod tests {
     #[test]
     fn test_ra6h_dec0_dist1_maps_to_z_parsec() {
         let pos = star_world_pos(6.0, 0.0, 1.0);
+        // RA 6h is world -Z: world = (x_eq, z_eq, -y_eq), a rotation (not a mirror).
         assert!(pos.x.abs() < 0.01, "x should be ~0, got {}", pos.x);
         assert!(pos.y.abs() < 0.01, "y should be ~0, got {}", pos.y);
         assert!(
-            (pos.z - AU_PER_PC).abs() < 0.01,
-            "z should be AU_PER_PC, got {}",
+            (pos.z + AU_PER_PC).abs() < 0.01,
+            "z should be -AU_PER_PC, got {}",
             pos.z
         );
     }
@@ -420,6 +422,27 @@ mod tests {
             pos.y
         );
         assert!(pos.z.abs() < 0.01, "z should be ~0, got {}", pos.z);
+    }
+
+    #[test]
+    fn test_sky_is_not_mirrored() {
+        // Facing RA 6h on the celestial equator with north up, RA 0h (to the west) must be
+        // on the right, as on the real sky. A mirrored world mapping puts it on the left.
+        let toward_6h = star_world_pos(6.0, 0.0, 1.0).normalize().as_vec3();
+        let (_, _, rot) = crate::goto::look_rotation(toward_6h);
+        let right = rot * Vec3::X;
+        let toward_0h = star_world_pos(0.0, 0.0, 1.0).normalize().as_vec3();
+        assert!(right.dot(toward_0h) > 0.99, "RA 0h should be to the right");
+    }
+
+    #[test]
+    fn test_orion_belt_order_from_earth() {
+        // Looking at Orion's belt with north up: Mintaka (west) right, Alnitak (east) left.
+        let mintaka = star_world_pos(5.5337, -0.2991, 380.0).normalize().as_vec3();
+        let alnitak = star_world_pos(5.6795, -1.9425, 387.0).normalize().as_vec3();
+        let (_, _, rot) = crate::goto::look_rotation((mintaka + alnitak).normalize());
+        let right = rot * Vec3::X;
+        assert!(mintaka.dot(right) > alnitak.dot(right));
     }
 
     #[test]
