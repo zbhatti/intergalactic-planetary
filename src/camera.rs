@@ -1,14 +1,14 @@
-use bevy::{
-    core_pipeline::bloom::Bloom,
-    input::mouse::MouseMotion,
-    prelude::*,
-    render::view::screenshot::{save_to_disk, Screenshot},
-    window::CursorGrabMode,
-};
 use crate::constants::C_AU_PER_S;
 use crate::menu::MenuOpen;
 use crate::search::Search;
 use crate::speed::SpeedState;
+use bevy::{
+    core_pipeline::bloom::Bloom,
+    input::mouse::MouseMotion,
+    prelude::*,
+    render::view::screenshot::{Screenshot, save_to_disk},
+    window::CursorGrabMode,
+};
 
 #[derive(Resource)]
 pub struct CursorLocked(pub bool);
@@ -28,7 +28,10 @@ pub fn setup_camera(mut commands: Commands, mut windows: Query<&mut Window>) {
     }
     commands.spawn((
         Camera3d::default(),
-        Camera { hdr: true, ..default() },
+        Camera {
+            hdr: true,
+            ..default()
+        },
         Bloom::NATURAL,
         Projection::Perspective(PerspectiveProjection {
             near: 1e-6,

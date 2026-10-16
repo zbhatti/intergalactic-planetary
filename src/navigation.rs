@@ -1,15 +1,12 @@
-use bevy::{
-    prelude::*,
-    window::PrimaryWindow,
-};
 use crate::camera::FlyCam;
 use crate::search::Search;
+use bevy::{prelude::*, window::PrimaryWindow};
 
 // Only used by draw_offscreen_arrow for 3D placement of the arrow gizmo.
 const ARROW_DEPTH: f32 = 1e-4;
 
 const RETICLE_RADIUS: f32 = 30.0; // pixels
-const RETICLE_BORDER: f32 = 2.0;  // pixels
+const RETICLE_BORDER: f32 = 2.0; // pixels
 
 #[derive(Component)]
 pub struct TargetReticle;
@@ -31,7 +28,9 @@ pub fn orient_camera_to_target(
     }
     search.should_orient = false;
     let Some(target) = search.target else { return };
-    let Ok((mut transform, mut cam)) = cam_query.single_mut() else { return };
+    let Ok((mut transform, mut cam)) = cam_query.single_mut() else {
+        return;
+    };
 
     let dir = (target - transform.translation).normalize();
     let (yaw, pitch) = dir_to_yaw_pitch(dir);
@@ -69,22 +68,24 @@ pub fn update_target_reticle(
     windows: Query<&Window, With<PrimaryWindow>>,
     mut reticle_query: Query<(&mut Node, &mut Visibility), With<TargetReticle>>,
 ) {
-    let Ok((mut node, mut vis)) = reticle_query.single_mut() else { return };
+    let Ok((mut node, mut vis)) = reticle_query.single_mut() else {
+        return;
+    };
 
     let Some(target) = search.target else {
         *vis = Visibility::Hidden;
         return;
     };
-    let Ok((camera, cam_global)) = cam_query.single() else { return };
+    let Ok((camera, cam_global)) = cam_query.single() else {
+        return;
+    };
     let Ok(window) = windows.single() else { return };
 
     let vp = Vec2::new(window.width(), window.height());
 
     let on_screen = camera
         .world_to_viewport(cam_global, target)
-        .map(|sp| {
-            sp.x >= 0.0 && sp.x <= vp.x && sp.y >= 0.0 && sp.y <= vp.y
-        })
+        .map(|sp| sp.x >= 0.0 && sp.x <= vp.x && sp.y >= 0.0 && sp.y <= vp.y)
         .unwrap_or(false);
 
     if !on_screen {
@@ -105,14 +106,16 @@ pub fn draw_offscreen_arrow(
     windows: Query<&Window, With<PrimaryWindow>>,
 ) {
     let Some(target) = search.target else { return };
-    let Ok((camera, cam_global, cam_local)) = cam_query.single() else { return };
+    let Ok((camera, cam_global, cam_local)) = cam_query.single() else {
+        return;
+    };
     let Ok(window) = windows.single() else { return };
 
     let vp = Vec2::new(window.width(), window.height());
 
     let on_screen = camera
         .world_to_viewport(cam_global, target)
-        .map_or(false, |sp| sp.x >= 0.0 && sp.x <= vp.x && sp.y >= 0.0 && sp.y <= vp.y);
+        .is_ok_and(|sp| sp.x >= 0.0 && sp.x <= vp.x && sp.y >= 0.0 && sp.y <= vp.y);
     if on_screen {
         return;
     }
@@ -141,8 +144,16 @@ pub fn draw_offscreen_arrow(
     let d = ARROW_DEPTH;
     let v_half = d * 0.4142; // tan(22.5°)
     let h_half = v_half * (vp.x / vp.y);
-    let tx = if screen_dir.x.abs() > 1e-6 { h_half / screen_dir.x.abs() } else { f32::MAX };
-    let ty = if screen_dir.y.abs() > 1e-6 { v_half / screen_dir.y.abs() } else { f32::MAX };
+    let tx = if screen_dir.x.abs() > 1e-6 {
+        h_half / screen_dir.x.abs()
+    } else {
+        f32::MAX
+    };
+    let ty = if screen_dir.y.abs() > 1e-6 {
+        v_half / screen_dir.y.abs()
+    } else {
+        f32::MAX
+    };
     let t = tx.min(ty) * 0.80;
 
     let center = cam_pos + cam_forward * d;
@@ -170,13 +181,21 @@ mod tests {
     #[test]
     fn test_up_dir_gives_pitch_90() {
         let (_yaw, pitch) = dir_to_yaw_pitch(Vec3::new(0.0, 1.0, 0.0));
-        assert!((pitch - 90.0).abs() < 0.01, "expected pitch≈90, got {}", pitch);
+        assert!(
+            (pitch - 90.0).abs() < 0.01,
+            "expected pitch≈90, got {}",
+            pitch
+        );
     }
 
     #[test]
     fn test_right_dir_gives_yaw_neg90() {
         let (yaw, pitch) = dir_to_yaw_pitch(Vec3::new(1.0, 0.0, 0.0));
         assert!(pitch.abs() < 0.01, "expected pitch≈0, got {}", pitch);
-        assert!((yaw - (-90.0)).abs() < 0.01, "expected yaw≈-90, got {}", yaw);
+        assert!(
+            (yaw - (-90.0)).abs() < 0.01,
+            "expected yaw≈-90, got {}",
+            yaw
+        );
     }
 }
