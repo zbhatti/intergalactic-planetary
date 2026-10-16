@@ -69,6 +69,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `main.rs` | App wiring only — registers resources and systems |
 | `constants.rs` | Physical constants: `C_AU_PER_S`, `KM_PER_AU`, `AU_PER_LY` |
 | `coords.rs` | `WorldPos`/`BodyRadius`, floating origin + rebase, nearest-body scan, `NavSet` ordering |
+| `info.rs` | `BodyInfo`/`BodyKind` (name + facts per object), crosshair click-select, info panel (I) |
 | `goto.rs` | G: go-to flight (turn, then log-distance travel to a few radii from the target) |
 | `camera.rs` | `FlyCam` component, `CursorLocked` resource, camera spawn + WASD movement in world space |
 | `search.rs` | `Search` + `ObjectCatalog` resources, search UI, `catalog_matches` |
@@ -89,6 +90,8 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | Mouse | Look around |
 | Shift | Cycle throttle (x0.1 → x30) on the adaptive speed (speed = throttle x distance to nearest surface, per second) |
 | G | Go to the selected object |
+| Left click | Select the object under the center crosshair |
+| I | Show/hide the info panel for the selection |
 | `[` / `]` | Decrease / increase exposure (EV-5 to EV+20) |
 | Enter | Open object search |
 | Arrow Up/Down | Navigate search results |
@@ -199,7 +202,8 @@ Each feature lands as its own PR, and each one should:
 1. **Test the logic headlessly.** Keep pure math in plain functions with unit tests. For behaviour
    across frames, use `testing::headless_app()`. It runs real Bevy schedules with `MinimalPlugins`
    and a fixed 60 Hz clock, with no window or GPU, so results are deterministic on CI. Drive input
-   with `press_key`/`release_key`; these send real `KeyboardInput` events, because setting
+   with `press_key`/`release_key` (key codes) or `tap_logical`/`type_text` (logical keys, which
+   text input such as search reads). These send real `KeyboardInput` events, because setting
    `ButtonInput` directly gets cleared in `PreUpdate` before game systems see it. Keep systems that
    need to run headless free of render/asset parameters.
 2. **Benchmark before merging.** Run `IP_BENCH=20 cargo run --release` and append the `IP_BENCH` line

@@ -1,6 +1,7 @@
 use crate::camera::FlyCam;
 use crate::constants::{AU_PER_PC, KM_PER_AU};
 use crate::coords::{BodyRadius, WorldPos, view_transform};
+use crate::info::{BodyInfo, BodyKind, star_facts};
 use crate::menu::{ShowBackgroundStars, ShowStarLabels};
 use crate::search::{ObjectCatalog, Search};
 use bevy::math::DVec3;
@@ -180,6 +181,11 @@ pub fn setup_stars(
                 Transform::default(),
                 WorldPos(pos),
                 BodyRadius(radius),
+                BodyInfo {
+                    name: name.to_string(),
+                    kind: BodyKind::Star,
+                    facts: star_facts(spect, luminosity as f64, radius_solar as f64, dist),
+                },
                 Star {
                     luminosity_solar: luminosity,
                     spectral: spect,

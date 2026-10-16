@@ -30,6 +30,7 @@ cargo test --release -- --ignored --nocapture perf_   # CPU micro-benchmarks for
 |---|---|---|---|---|---|---|---|---|
 | 2026-10-16 | Baseline after Bevy feature trim + perf tooling | release | 1201 | 16.67 | 17.94 | 21.48 | 0 | 2156 |
 | 2026-10-16 | Phase 1: f64 world + floating origin, adaptive speed, go-to tour bench | release | 1201 | 16.67 | 17.99 | 23.84 | 0 | 2156 |
+| 2026-10-16 | Phase 2.1: click-select + info panel | release | 1201 | 16.67 | 17.65 | 22.99 | 0 | 2158 |
 
 ## Micro-benchmarks (`cargo test --release -- --ignored --nocapture perf_`)
 

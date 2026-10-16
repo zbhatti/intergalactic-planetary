@@ -5,6 +5,7 @@ mod camera;
 mod constants;
 mod coords;
 mod goto;
+mod info;
 mod menu;
 mod navigation;
 mod perf;
@@ -25,7 +26,12 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins((coords::CoordsPlugin, goto::GoToPlugin, perf::PerfPlugin))
+        .add_plugins((
+            coords::CoordsPlugin,
+            goto::GoToPlugin,
+            info::InfoPlugin,
+            perf::PerfPlugin,
+        ))
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(camera::CursorLocked(true))
         .insert_resource(camera::ScreenshotCounter::default())

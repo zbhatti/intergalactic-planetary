@@ -37,14 +37,46 @@ pub fn release_key(app: &mut App, key: KeyCode) {
 }
 
 fn send_key(app: &mut App, key_code: KeyCode, state: ButtonState) {
+    send_event(
+        app,
+        key_code,
+        Key::Unidentified(NativeKey::Unidentified),
+        state,
+    );
+}
+
+fn send_event(app: &mut App, key_code: KeyCode, logical_key: Key, state: ButtonState) {
     app.world_mut().send_event(KeyboardInput {
         key_code,
-        logical_key: Key::Unidentified(NativeKey::Unidentified),
+        logical_key,
         state,
         text: None,
         repeat: false,
         window: Entity::PLACEHOLDER,
     });
+}
+
+/// Presses and releases a key by its *logical* value (what text input such as the search box
+/// reads), then runs one update. Enter/Escape/Backspace/arrows also get their key codes.
+pub fn tap_logical(app: &mut App, key: Key) {
+    let code = match &key {
+        Key::Enter => KeyCode::Enter,
+        Key::Escape => KeyCode::Escape,
+        Key::Backspace => KeyCode::Backspace,
+        Key::ArrowUp => KeyCode::ArrowUp,
+        Key::ArrowDown => KeyCode::ArrowDown,
+        _ => KeyCode::Unidentified(bevy::input::keyboard::NativeKeyCode::Unidentified),
+    };
+    send_event(app, code, key.clone(), ButtonState::Pressed);
+    send_event(app, code, key, ButtonState::Released);
+    app.update();
+}
+
+/// Types `text` one character per update, as logical character keys.
+pub fn type_text(app: &mut App, text: &str) {
+    for c in text.chars() {
+        tap_logical(app, Key::Character(c.to_string().into()));
+    }
 }
 
 #[cfg(test)]
