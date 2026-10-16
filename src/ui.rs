@@ -1,7 +1,8 @@
 use crate::camera::FlyCam;
 use crate::constants::{AU_PER_LY, C_AU_PER_S, KM_PER_AU};
+use crate::coords::WorldPos;
 use crate::search::Search;
-use crate::speed::SpeedState;
+use crate::speed::{CurrentSpeed, SpeedState};
 use crate::stars::ExposureSettings;
 use bevy::prelude::*;
 
@@ -14,8 +15,17 @@ pub struct SpeedLabel;
 #[derive(Component)]
 pub struct ExposureLabel;
 
-pub fn format_distance(dist_au: f32) -> String {
+pub fn format_distance(dist_au: f64) -> String {
     let ly = dist_au / AU_PER_LY;
+    if ly >= 1.0e9 {
+        return format!("{:.2} Gly", ly / 1.0e9);
+    }
+    if ly >= 1.0e6 {
+        return format!("{:.2} Mly", ly / 1.0e6);
+    }
+    if ly >= 1.0e4 {
+        return format!("{:.0} ly", ly);
+    }
     if ly >= 1.0 {
         return format!("{:.2} ly", ly);
     }
@@ -38,8 +48,11 @@ pub fn format_distance(dist_au: f32) -> String {
     }
 }
 
-pub fn format_speed(au_per_sec: f32) -> String {
+pub fn format_speed(au_per_sec: f64) -> String {
     let c = au_per_sec / C_AU_PER_S;
+    if c >= 1.0e6 {
+        return format!("{:.2e}c", c);
+    }
     if c >= 1000.0 {
         format!("{:.0}c", c)
     } else if c >= 1.0 {
@@ -86,7 +99,7 @@ pub fn setup_speed_label(mut commands: Commands) {
         TextColor(Color::srgb(0.7, 0.9, 0.7)),
         Node {
             position_type: PositionType::Absolute,
-            bottom: Val::Px(60.0),
+            bottom: Val::Px(84.0),
             right: Val::Px(24.0),
             ..default()
         },
@@ -104,7 +117,7 @@ pub fn setup_exposure_label(mut commands: Commands) {
         TextColor(Color::srgb(0.9, 0.8, 0.5)),
         Node {
             position_type: PositionType::Absolute,
-            bottom: Val::Px(96.0),
+            bottom: Val::Px(120.0),
             right: Val::Px(24.0),
             ..default()
         },
@@ -113,18 +126,19 @@ pub fn setup_exposure_label(mut commands: Commands) {
 
 pub fn update_distance_label(
     search: Res<Search>,
-    cam_query: Query<&Transform, With<FlyCam>>,
+    cam_query: Query<&WorldPos, With<FlyCam>>,
+    targets: Query<&WorldPos, Without<FlyCam>>,
     mut label_query: Query<(&mut Text, &mut Visibility), With<DistanceLabel>>,
 ) {
     let Ok((mut text, mut vis)) = label_query.single_mut() else {
         return;
     };
-    let Some(target) = search.target else {
-        *vis = Visibility::Hidden;
+    let Some(target) = search.target.and_then(|e| targets.get(e).ok()) else {
+        vis.set_if_neq(Visibility::Hidden);
         return;
     };
     let Ok(cam) = cam_query.single() else { return };
-    let dist_au = (target - cam.translation).length();
+    let dist_au = target.0.distance(cam.0);
     let name = search.target_name.as_deref().unwrap_or("");
     text.0 = format!("{}\n{}", name, format_distance(dist_au));
     *vis = Visibility::Visible;
@@ -132,15 +146,17 @@ pub fn update_distance_label(
 
 pub fn update_speed_label(
     speed_state: Res<SpeedState>,
-    cam_query: Query<&FlyCam>,
+    speed: Res<CurrentSpeed>,
     mut label_query: Query<&mut Text, With<SpeedLabel>>,
 ) {
     let Ok(mut text) = label_query.single_mut() else {
         return;
     };
-    let Ok(cam) = cam_query.single() else { return };
-    let au_per_sec = cam.speed * speed_state.multiplier();
-    text.0 = format!("{} [{}]", format_speed(au_per_sec), speed_state.label());
+    text.0 = format!(
+        "{} [auto {}]",
+        format_speed(speed.au_per_sec),
+        speed_state.label()
+    );
 }
 
 pub fn update_exposure_label(
@@ -168,6 +184,18 @@ mod tests {
     fn test_format_distance_100ly() {
         let result = format_distance(100.0 * AU_PER_LY);
         assert!(result.ends_with("ly"), "got: {}", result);
+    }
+
+    #[test]
+    fn test_format_distance_large_scales() {
+        assert_eq!(format_distance(54_000.0 * AU_PER_LY), "54000 ly");
+        assert_eq!(format_distance(2.5e6 * AU_PER_LY), "2.50 Mly");
+        assert_eq!(format_distance(13.8e9 * AU_PER_LY), "13.80 Gly");
+    }
+
+    #[test]
+    fn test_format_speed_scientific_above_million_c() {
+        assert_eq!(format_speed(3.0e9 * C_AU_PER_S), "3.00e9c");
     }
 
     #[test]
@@ -240,6 +268,8 @@ mod tests {
             100.0,
             AU_PER_LY,
             1000.0 * AU_PER_LY,
+            1.0e7 * AU_PER_LY,
+            1.0e10 * AU_PER_LY,
         ] {
             let s = format_distance(dist);
             assert!(
@@ -259,6 +289,7 @@ mod tests {
             C_AU_PER_S * 0.5,
             C_AU_PER_S,
             C_AU_PER_S * 1000.0,
+            C_AU_PER_S * 1.0e12,
         ] {
             let s = format_speed(speed);
             assert!(

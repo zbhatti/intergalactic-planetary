@@ -8,14 +8,15 @@ use bevy::{
 };
 
 #[derive(Resource, Default)]
-pub struct ObjectCatalog(pub Vec<(String, Vec3)>);
+/// Searchable objects: display name and the entity (with `WorldPos` + `BodyRadius`).
+pub struct ObjectCatalog(pub Vec<(String, Entity)>);
 
 #[derive(Resource, Default)]
 pub struct Search {
     pub active: bool,
     pub text: String,
     pub selected_idx: usize,
-    pub target: Option<Vec3>,
+    pub target: Option<Entity>,
     pub target_name: Option<String>,
     pub should_orient: bool,
 }
@@ -91,8 +92,8 @@ pub fn handle_search(
         match &event.logical_key {
             Key::Enter => {
                 let matches = catalog_matches(&catalog, &search.text);
-                if let Some(&(name, pos)) = matches.get(search.selected_idx) {
-                    search.target = Some(pos);
+                if let Some(&(name, entity)) = matches.get(search.selected_idx) {
+                    search.target = Some(entity);
                     search.target_name = Some(name.to_string());
                     search.should_orient = true;
                 }
@@ -123,13 +124,13 @@ pub fn handle_search(
     }
 }
 
-pub fn catalog_matches<'a>(catalog: &'a ObjectCatalog, text: &str) -> Vec<(&'a str, Vec3)> {
+pub fn catalog_matches<'a>(catalog: &'a ObjectCatalog, text: &str) -> Vec<(&'a str, Entity)> {
     let lower = text.to_lowercase();
     catalog
         .0
         .iter()
         .filter(|(name, _)| name.to_lowercase().contains(&lower))
-        .map(|(name, pos)| (name.as_str(), *pos))
+        .map(|(name, entity)| (name.as_str(), *entity))
         .take(8)
         .collect()
 }
@@ -174,13 +175,12 @@ pub fn update_search_ui(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy::prelude::Vec3;
 
     #[test]
     fn test_case_insensitive_match() {
         let catalog = ObjectCatalog(vec![
-            ("Earth".to_string(), Vec3::ZERO),
-            ("Mars".to_string(), Vec3::ZERO),
+            ("Earth".to_string(), Entity::PLACEHOLDER),
+            ("Mars".to_string(), Entity::PLACEHOLDER),
         ]);
         let results = catalog_matches(&catalog, "earth");
         assert_eq!(results.len(), 1);
@@ -189,8 +189,8 @@ mod tests {
 
     #[test]
     fn test_empty_query_returns_all_up_to_8() {
-        let entries: Vec<(String, Vec3)> = (0..10)
-            .map(|i| (format!("Star{}", i), Vec3::ZERO))
+        let entries: Vec<(String, Entity)> = (0..10)
+            .map(|i| (format!("Star{}", i), Entity::PLACEHOLDER))
             .collect();
         let catalog = ObjectCatalog(entries);
         let results = catalog_matches(&catalog, "");
@@ -199,15 +199,15 @@ mod tests {
 
     #[test]
     fn test_no_match_returns_empty() {
-        let catalog = ObjectCatalog(vec![("Earth".to_string(), Vec3::ZERO)]);
+        let catalog = ObjectCatalog(vec![("Earth".to_string(), Entity::PLACEHOLDER)]);
         let results = catalog_matches(&catalog, "xyznotfound");
         assert!(results.is_empty());
     }
 
     #[test]
     fn test_caps_at_8_results() {
-        let entries: Vec<(String, Vec3)> = (0..12)
-            .map(|i| (format!("Star{}", i), Vec3::ZERO))
+        let entries: Vec<(String, Entity)> = (0..12)
+            .map(|i| (format!("Star{}", i), Entity::PLACEHOLDER))
             .collect();
         let catalog = ObjectCatalog(entries);
         let results = catalog_matches(&catalog, "star");

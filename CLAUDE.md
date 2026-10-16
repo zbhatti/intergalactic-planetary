@@ -8,7 +8,7 @@ A 3D universe explorer built with Rust and Bevy. The player can fly through a ph
 
 ```bash
 cargo run          # build and launch
-cargo test         # run all 42 unit tests (headless, no GPU needed)
+cargo test         # run all unit + headless app tests (no GPU needed)
 cargo build --release --no-default-features   # standalone release binary
 ```
 
@@ -35,15 +35,26 @@ CI runs on Ubuntu, macOS (ARM), and Windows via GitHub Actions (`.github/workflo
 ## Coordinate system — read this first
 
 ```
-1 AU  = 1 game unit
-1 pc  = 1000 game units   (PARSEC_TO_UNITS)
-1 ly  ≈ 206.3 game units
+World space: f64, 1 unit = 1 AU, Sun at the origin (WorldPos component)
+1 pc  = 206,264.806 AU   (AU_PER_PC — real scale; before Phase 1 it was a compressed 1000)
+1 ly  = 63,241.077 AU    (AU_PER_LY)
+Render space: f32 Transform = WorldPos - FloatingOrigin (origin kept near the camera)
 ```
+
+**Never read or write `Transform::translation` for game logic.** Use `WorldPos` (f64). `coords.rs` writes render
+transforms in `NavSet::Rebase`. For screen projection, project `(object_world - camera_world)` through
+`coords::view_transform(camera_rotation)`. That's independent of where the origin is, so it never jumps on a
+rebase. Systems run in `Update` in three chained sets: `NavSet::Input` (camera moves) → `NavSet::Rebase`
+(nearest-body scan, origin shift, transform sync) → `NavSet::View` (labels, HUD, brightness, gizmos).
+
+Precision: f64 resolves ~150 m out to ~50 pc but only ~2000 km at ~0.5 Mpc. Planets around distant stars will
+need star-local frames (see `coords.rs` docs). The camera's frustum `far` is 1e15 AU: Bevy culls past `far`
+even though depth is infinite reverse-Z, so it must exceed the farthest object.
 
 The Sun is at the origin. Planets orbit in the XZ plane (Y = 0). Star positions are converted from real RA/Dec/distance catalog data using spherical coordinates:
 
 ```rust
-// ra_hours → radians; dec_deg → radians; dist_pc → game units
+// ra_hours → radians; dec_deg → radians; dist_pc → AU
 x = d * cos(dec) * cos(ra)
 y = d * sin(dec)
 z = d * cos(dec) * sin(ra)
@@ -57,9 +68,11 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 |---|---|
 | `main.rs` | App wiring only — registers resources and systems |
 | `constants.rs` | Physical constants: `C_AU_PER_S`, `KM_PER_AU`, `AU_PER_LY` |
-| `camera.rs` | `FlyCam` component, `CursorLocked` resource, camera spawn + movement |
+| `coords.rs` | `WorldPos`/`BodyRadius`, floating origin + rebase, nearest-body scan, `NavSet` ordering |
+| `goto.rs` | G: go-to flight (turn, then log-distance travel to a few radii from the target) |
+| `camera.rs` | `FlyCam` component, `CursorLocked` resource, camera spawn + WASD movement in world space |
 | `search.rs` | `Search` + `ObjectCatalog` resources, search UI, `catalog_matches` |
-| `speed.rs` | `SpeedState` resource, Shift-to-cycle speed multiplier |
+| `speed.rs` | Distance-adaptive speed (`CurrentSpeed`), Shift-to-cycle throttle |
 | `solar_system.rs` | Spawns Sun + 8 planets with heliocentric positions for 2026-06-25 |
 | `stars.rs` | 58-star catalog, `star_world_pos`, brightness model, dynamic scaling |
 | `ui.rs` | Distance/speed/exposure HUD labels, `format_distance`, `format_speed` |
@@ -72,9 +85,10 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 
 | Key | Action |
 |---|---|
-| W/A/S/D | Fly forward/left/back/right |
+| W/A/S/D | Fly forward/left/back/right (cancels go-to) |
 | Mouse | Look around |
-| Shift | Cycle speed multiplier (x0.1 → x1,000,000 of c) |
+| Shift | Cycle throttle (x0.1 → x30) on the adaptive speed (speed = throttle x distance to nearest surface, per second) |
+| G | Go to the selected object |
 | `[` / `]` | Decrease / increase exposure (EV-5 to EV+20) |
 | Enter | Open object search |
 | Arrow Up/Down | Navigate search results |
@@ -98,7 +112,7 @@ An earlier version included `/ 206_265.0 * PARSEC_TO_UNITS`, which is the parall
 
 ### 2. Stars at real distances are sub-pixel — dynamic scaling required
 
-Even with the correct physical radius, Sirius at 2637 AU has a sphere radius of ~0.008 AU, which is ~0.00034° on screen — far below one pixel. Every frame, `update_star_brightness` scales each star's `Transform` so its angular diameter is always ≥ `MIN_STAR_ANGLE` (0.002 rad ≈ 2–3 pixels):
+Even with the correct physical radius, Sirius at 543,920 AU (2.64 pc) has a sphere radius of ~0.008 AU, which is ~0.0000017° on screen — far below one pixel. Whenever the camera moves, `update_star_brightness` scales each star's `Transform` so its angular diameter is always ≥ `MIN_STAR_ANGLE` (0.002 rad ≈ 2–3 pixels):
 
 ```rust
 pub fn star_visual_radius(physical_radius: f32, cam_dist_units: f32) -> f32 {
@@ -121,7 +135,7 @@ Stars use high emissive values to appear bright. Without HDR (`Camera { hdr: tru
 ### 5. Speed display threshold: c is ~0.002004 AU/s
 
 ```rust
-pub const C_AU_PER_S: f32 = 299_792.458 / 149_597_870.7; // ≈ 0.002004 AU/s
+pub const C_AU_PER_S: f64 = 299_792.458 / KM_PER_AU; // ≈ 0.002004 AU/s
 ```
 
 `format_speed` switches to km/s only below 0.01c (~0.00002 AU/s). Passing 0.001 AU/s gives `"0.4990c"`, not km/s — this tripped up a test and is the expected behavior.
@@ -148,6 +162,16 @@ Without this filter the system won't compile.
 - Events use `.write()` not `.send()` (e.g., `exit.write(AppExit::Success)`).
 - `MeshMaterial3d<M>` is a newtype: access the handle via `.0`.
 
+### 9. Close-range star brightness is capped
+
+Point-source brightness (`L / d²`) reaches ~1e10 within a few AU of a star, and bloom then whites out the screen.
+`star_brightness` caps it at `MAX_STAR_BRIGHTNESS` (30). Remove the cap only together with real auto-exposure.
+
+### 10. Benchmarks need an awake display
+
+With the screen blanked, GNOME throttles presentation to a constant 250 ms per frame. Run `bash ~/bin/wake-screen.sh`
+first (see `PERF.md`).
+
 ## Brightness model
 
 ```
@@ -156,7 +180,7 @@ emissive = 2^EV × 0.5 × luminosity_solar / dist_pc²
 
 - `BRIGHTNESS_SCALE = 0.5` calibrated so Vega (L=40.12 L☉, d=7.68 pc) ≈ emissive 0.34 at EV 0.
 - Spectral color (from `spectral_color`) is applied as a tint multiplied by brightness.
-- Distance is clamped to a minimum of 1e-4 pc to avoid infinite brightness on close approach.
+- Distance is clamped to a minimum of 1e-4 pc, and the result is capped at `MAX_STAR_BRIGHTNESS` (see gotcha 9).
 - Exposure range: EV -5 (dim) to EV +20 (very sensitive). Each step doubles/halves all star brightness.
 
 ## Adding new catalog stars

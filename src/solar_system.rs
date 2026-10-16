@@ -1,6 +1,8 @@
 use crate::constants::KM_PER_AU;
+use crate::coords::{BodyRadius, WorldPos};
 use crate::search::ObjectCatalog;
 use crate::stars::StarLabelFor;
+use bevy::math::DVec3;
 use bevy::prelude::*;
 
 pub fn setup_solar_system(
@@ -10,7 +12,7 @@ pub fn setup_solar_system(
     mut catalog: ResMut<ObjectCatalog>,
 ) {
     // (name, semi-major axis AU, mean longitude deg for 2026-06-25, radius km, R, G, B)
-    let bodies: &[(&str, f32, f32, f32, f32, f32, f32)] = &[
+    let bodies: &[(&str, f64, f64, f64, f32, f32, f32)] = &[
         ("Sun", 0.0, 0.0, 695_700.0, 1.00, 0.85, 0.30),
         ("Mercury", 0.387, 28.85, 2_439.7, 0.55, 0.55, 0.55),
         ("Venus", 0.723, 279.68, 6_051.8, 0.88, 0.82, 0.62),
@@ -24,7 +26,7 @@ pub fn setup_solar_system(
 
     for &(name, a, lon_deg, radius_km, r, g, b) in bodies {
         let lon_rad = lon_deg.to_radians();
-        let pos = Vec3::new(a * lon_rad.cos(), 0.0, a * lon_rad.sin());
+        let pos = DVec3::new(a * lon_rad.cos(), 0.0, a * lon_rad.sin());
         let radius_au = radius_km / KM_PER_AU;
 
         let mat = if name == "Sun" {
@@ -41,9 +43,11 @@ pub fn setup_solar_system(
 
         let body_entity = commands
             .spawn((
-                Mesh3d(meshes.add(Sphere::new(radius_au))),
+                Mesh3d(meshes.add(Sphere::new(radius_au as f32))),
                 MeshMaterial3d(mat),
-                Transform::from_translation(pos),
+                Transform::default(),
+                WorldPos(pos),
+                BodyRadius(radius_au),
             ))
             .id();
 
@@ -62,6 +66,6 @@ pub fn setup_solar_system(
             Visibility::Hidden,
         ));
 
-        catalog.0.push((name.to_string(), pos));
+        catalog.0.push((name.to_string(), body_entity));
     }
 }

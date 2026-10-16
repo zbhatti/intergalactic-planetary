@@ -1,24 +1,36 @@
 use crate::camera::FlyCam;
+use crate::constants::{AU_PER_PC, KM_PER_AU};
+use crate::coords::{BodyRadius, WorldPos, view_transform};
 use crate::menu::{ShowBackgroundStars, ShowStarLabels};
 use crate::search::{ObjectCatalog, Search};
+use bevy::math::DVec3;
 use bevy::prelude::*;
 use rand::Rng;
-use std::f32::consts::PI;
+use std::f64::consts::PI;
 
-pub const PARSEC_TO_UNITS: f32 = 1000.0;
-// Correct solar radius: 695700 km / 149597870.7 km·AU⁻¹ = 0.004650 AU = 0.004650 game units
-pub const SOLAR_RADIUS_UNITS: f32 = 695_700.0 / 149_597_870.7;
+// Correct solar radius: 695700 km / 149597870.7 km·AU⁻¹ = 0.004650 AU (world units are AU)
+pub const SOLAR_RADIUS_UNITS: f64 = 695_700.0 / KM_PER_AU;
 
 // Physical scale: emissive = 2^ev * BRIGHTNESS_SCALE * luminosity / dist_pc²
 // Calibrated so Vega (L=40.12, d=7.68 pc) ≈ 0.34 at EV 0 (bright but not blown out)
 const BRIGHTNESS_SCALE: f32 = 0.5;
+
+// Ceiling on a star's emissive brightness. Point-source 1/d^2 brightness reaches ~1e10 within
+// a few AU of a star; with bloom that whites out the whole screen on arrival. Capped, a close
+// star reads as a bright disk with a modest glow. (Proper fix: auto-exposure, see ROADMAP.)
+const MAX_STAR_BRIGHTNESS: f32 = 30.0;
+
+pub fn star_brightness(ev_factor: f32, luminosity_solar: f32, dist_pc: f32) -> f32 {
+    let dist_pc = dist_pc.max(1e-4);
+    (ev_factor * BRIGHTNESS_SCALE * luminosity_solar / (dist_pc * dist_pc)).min(MAX_STAR_BRIGHTNESS)
+}
 
 // Stars are scaled up dynamically so their angular diameter is at least this many radians.
 // ~0.002 rad ≈ 0.11° ≈ 2-3 pixels at a typical FOV, ensuring sub-pixel stars are always visible.
 const MIN_STAR_ANGLE: f32 = 0.002;
 
 // (name, RA hours, Dec deg, dist pc, spectral, radius solar radii, luminosity solar)
-const CATALOG_STARS: &[(&str, f32, f32, f32, char, f32, f32)] = &[
+const CATALOG_STARS: &[(&str, f64, f64, f64, char, f32, f32)] = &[
     ("Sirius", 6.7525, -16.7161, 2.637, 'A', 1.711, 25.4),
     ("Canopus", 6.3992, -52.6956, 95.88, 'F', 71.0, 10_700.0),
     ("Arcturus", 14.2612, 19.1822, 11.26, 'K', 25.4, 170.0),
@@ -95,6 +107,8 @@ pub struct Star {
     pub luminosity_solar: f32,
     pub spectral: char,
     pub radius_solar: f32,
+    /// Brightness last written to the material; skips GPU re-uploads for changes < 1%.
+    pub last_brightness: f32,
 }
 
 /// Links a UI text label entity back to the catalog star it tracks.
@@ -135,11 +149,12 @@ pub fn spectral_color(class: char) -> LinearRgba {
     }
 }
 
-pub fn star_world_pos(ra_hours: f32, dec_deg: f32, dist_pc: f32) -> Vec3 {
+/// Equatorial RA/Dec/distance to heliocentric world position in AU.
+pub fn star_world_pos(ra_hours: f64, dec_deg: f64, dist_pc: f64) -> DVec3 {
     let ra = ra_hours * 15.0 * PI / 180.0;
     let dec = dec_deg * PI / 180.0;
-    let d = dist_pc * PARSEC_TO_UNITS;
-    Vec3::new(
+    let d = dist_pc * AU_PER_PC;
+    DVec3::new(
         d * dec.cos() * ra.cos(),
         d * dec.sin(),
         d * dec.cos() * ra.sin(),
@@ -154,19 +169,22 @@ pub fn setup_stars(
 ) {
     for &(name, ra, dec, dist, spect, radius_solar, luminosity) in CATALOG_STARS {
         let pos = star_world_pos(ra, dec, dist);
-        let radius = radius_solar * SOLAR_RADIUS_UNITS;
+        let radius = radius_solar as f64 * SOLAR_RADIUS_UNITS;
         let star_entity = commands
             .spawn((
-                Mesh3d(meshes.add(Sphere::new(radius))),
+                Mesh3d(meshes.add(Sphere::new(radius as f32))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     emissive: spectral_color(spect),
                     ..default()
                 })),
-                Transform::from_translation(pos),
+                Transform::default(),
+                WorldPos(pos),
+                BodyRadius(radius),
                 Star {
                     luminosity_solar: luminosity,
                     spectral: spect,
                     radius_solar,
+                    last_brightness: 0.0,
                 },
             ))
             .id();
@@ -186,7 +204,7 @@ pub fn setup_stars(
             Visibility::Hidden,
         ));
 
-        catalog.0.push((name.to_string(), pos));
+        catalog.0.push((name.to_string(), star_entity));
     }
 
     let mut rng = rand::thread_rng();
@@ -196,16 +214,18 @@ pub fn setup_stars(
     });
     // Unit sphere — each instance is scaled by its distance so it subtends MIN_STAR_ANGLE.
     let bg_mesh = meshes.add(Sphere::new(1.0));
+    // Decorative filler in a flattened disk 3-80 pc out. No BodyRadius: not navigable.
     for _ in 0..2000 {
-        let r = rng.gen_range(3000.0f32..80000.0f32);
-        let theta = rng.gen_range(0.0f32..2.0 * PI);
-        let y = rng.gen_range(-5000.0f32..5000.0f32);
-        let pos = Vec3::new(r * theta.cos(), y, r * theta.sin());
-        let visual_radius = pos.length() * MIN_STAR_ANGLE;
+        let r = rng.gen_range(3.0..80.0) * AU_PER_PC;
+        let theta = rng.gen_range(0.0..2.0 * PI);
+        let y = rng.gen_range(-5.0..5.0) * AU_PER_PC;
+        let pos = DVec3::new(r * theta.cos(), y, r * theta.sin());
+        let visual_radius = pos.length() as f32 * MIN_STAR_ANGLE;
         commands.spawn((
             Mesh3d(bg_mesh.clone()),
             MeshMaterial3d(bg_handle.clone()),
-            Transform::from_translation(pos).with_scale(Vec3::splat(visual_radius)),
+            Transform::from_scale(Vec3::splat(visual_radius)),
+            WorldPos(pos),
             BackgroundStar,
             Visibility::Hidden,
         ));
@@ -213,10 +233,17 @@ pub fn setup_stars(
     commands.insert_resource(BackgroundStarMaterial(bg_handle));
 }
 
+/// Recomputes star brightness and size from the camera distance. Runs only when the camera
+/// moved or the exposure changed.
 pub fn update_star_brightness(
-    cam_query: Query<&Transform, With<FlyCam>>,
+    cam_query: Query<Ref<WorldPos>, With<FlyCam>>,
     mut star_query: Query<
-        (&mut Transform, &MeshMaterial3d<StandardMaterial>, &Star),
+        (
+            &WorldPos,
+            &mut Transform,
+            &MeshMaterial3d<StandardMaterial>,
+            &mut Star,
+        ),
         Without<FlyCam>,
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -224,32 +251,45 @@ pub fn update_star_brightness(
     bg_mat: Res<BackgroundStarMaterial>,
 ) {
     let Ok(cam) = cam_query.single() else { return };
-    let cam_pos = cam.translation;
+    if !cam.is_changed() && !exposure.is_changed() {
+        return;
+    }
     let ev_factor = exposure.factor();
 
-    for (mut transform, mat_handle, star) in star_query.iter_mut() {
-        let dist_units = (transform.translation - cam_pos).length();
-        let dist_pc = (dist_units / PARSEC_TO_UNITS).max(1e-4);
-        let brightness = ev_factor * BRIGHTNESS_SCALE * star.luminosity_solar / (dist_pc * dist_pc);
-        let base = spectral_color(star.spectral);
-        if let Some(mat) = materials.get_mut(&mat_handle.0) {
-            mat.emissive = LinearRgba::new(
-                base.red * brightness,
-                base.green * brightness,
-                base.blue * brightness,
-                1.0,
-            );
+    for (pos, mut transform, mat_handle, mut star) in star_query.iter_mut() {
+        let dist_au = pos.0.distance(cam.0);
+        let brightness = star_brightness(
+            ev_factor,
+            star.luminosity_solar,
+            (dist_au / AU_PER_PC) as f32,
+        );
+        if (brightness / star.last_brightness.max(f32::MIN_POSITIVE) - 1.0).abs() > 0.01 {
+            star.last_brightness = brightness;
+            let base = spectral_color(star.spectral);
+            if let Some(mat) = materials.get_mut(&mat_handle.0) {
+                mat.emissive = LinearRgba::new(
+                    base.red * brightness,
+                    base.green * brightness,
+                    base.blue * brightness,
+                    1.0,
+                );
+            }
         }
 
         // Scale the sphere so its angular diameter is always >= MIN_STAR_ANGLE.
         // When the camera is close, physical size takes over naturally.
-        let physical_radius = star.radius_solar * SOLAR_RADIUS_UNITS;
-        let visual_radius = star_visual_radius(physical_radius, dist_units);
-        transform.scale = Vec3::splat(visual_radius / physical_radius);
+        let physical_radius = (star.radius_solar as f64 * SOLAR_RADIUS_UNITS) as f32;
+        let visual_radius = star_visual_radius(physical_radius, dist_au as f32);
+        let scale = Vec3::splat(visual_radius / physical_radius);
+        if transform.scale != scale {
+            transform.scale = scale;
+        }
     }
 
     // Background stars scale uniformly with exposure only.
-    if let Some(mat) = materials.get_mut(&bg_mat.0) {
+    if exposure.is_changed()
+        && let Some(mat) = materials.get_mut(&bg_mat.0)
+    {
         let b = (ev_factor * 0.1).max(0.001);
         mat.emissive = LinearRgba::new(0.7 * b, 0.8 * b, 1.0 * b, 1.0);
     }
@@ -263,14 +303,15 @@ pub fn star_visual_radius(physical_radius: f32, cam_dist_units: f32) -> f32 {
 
 pub fn update_star_labels(
     show: Res<ShowStarLabels>,
-    cam_query: Query<(&Camera, &GlobalTransform), With<FlyCam>>,
-    star_query: Query<&GlobalTransform>,
+    cam_query: Query<(&Camera, &WorldPos, &Transform), With<FlyCam>>,
+    positions: Query<&WorldPos>,
     mut label_query: Query<(&StarLabelFor, &mut Node, &mut Visibility)>,
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
 ) {
-    let Ok((camera, cam_transform)) = cam_query.single() else {
+    let Ok((camera, cam_pos, cam_t)) = cam_query.single() else {
         return;
     };
+    let view = view_transform(cam_t.rotation);
     let vp = windows
         .single()
         .map(|w| Vec2::new(w.width(), w.height()))
@@ -278,27 +319,24 @@ pub fn update_star_labels(
 
     for (label_for, mut node, mut vis) in label_query.iter_mut() {
         if !show.0 {
-            *vis = Visibility::Hidden;
+            vis.set_if_neq(Visibility::Hidden);
             continue;
         }
-        let Ok(star_gt) = star_query.get(label_for.0) else {
-            *vis = Visibility::Hidden;
-            continue;
-        };
-        let on_screen = camera
-            .world_to_viewport(cam_transform, star_gt.translation())
-            .map(|sp| sp.x >= 0.0 && sp.x <= vp.x && sp.y >= 0.0 && sp.y <= vp.y)
-            .unwrap_or(false);
-
-        if on_screen {
-            let screen_pos = camera
-                .world_to_viewport(cam_transform, star_gt.translation())
-                .unwrap();
-            *vis = Visibility::Visible;
-            node.left = Val::Px(screen_pos.x + 8.0);
-            node.top = Val::Px(screen_pos.y - 8.0);
-        } else {
-            *vis = Visibility::Hidden;
+        let screen = positions.get(label_for.0).ok().and_then(|pos| {
+            camera
+                .world_to_viewport(&view, (pos.0 - cam_pos.0).as_vec3())
+                .ok()
+                .filter(|sp| sp.x >= 0.0 && sp.x <= vp.x && sp.y >= 0.0 && sp.y <= vp.y)
+        });
+        match screen {
+            Some(sp) => {
+                vis.set_if_neq(Visibility::Visible);
+                node.left = Val::Px(sp.x + 8.0);
+                node.top = Val::Px(sp.y - 8.0);
+            }
+            None => {
+                vis.set_if_neq(Visibility::Hidden);
+            }
         }
     }
 }
@@ -346,8 +384,8 @@ mod tests {
     fn test_ra0_dec0_dist1_maps_to_x_parsec() {
         let pos = star_world_pos(0.0, 0.0, 1.0);
         assert!(
-            (pos.x - PARSEC_TO_UNITS).abs() < 0.01,
-            "x should be PARSEC_TO_UNITS, got {}",
+            (pos.x - AU_PER_PC).abs() < 0.01,
+            "x should be AU_PER_PC, got {}",
             pos.x
         );
         assert!(pos.y.abs() < 0.01, "y should be ~0, got {}", pos.y);
@@ -360,8 +398,8 @@ mod tests {
         assert!(pos.x.abs() < 0.01, "x should be ~0, got {}", pos.x);
         assert!(pos.y.abs() < 0.01, "y should be ~0, got {}", pos.y);
         assert!(
-            (pos.z - PARSEC_TO_UNITS).abs() < 0.01,
-            "z should be PARSEC_TO_UNITS, got {}",
+            (pos.z - AU_PER_PC).abs() < 0.01,
+            "z should be AU_PER_PC, got {}",
             pos.z
         );
     }
@@ -371,11 +409,20 @@ mod tests {
         let pos = star_world_pos(0.0, 90.0, 1.0);
         assert!(pos.x.abs() < 0.01, "x should be ~0, got {}", pos.x);
         assert!(
-            (pos.y - PARSEC_TO_UNITS).abs() < 0.01,
-            "y should be PARSEC_TO_UNITS, got {}",
+            (pos.y - AU_PER_PC).abs() < 0.01,
+            "y should be AU_PER_PC, got {}",
             pos.y
         );
         assert!(pos.z.abs() < 0.01, "z should be ~0, got {}", pos.z);
+    }
+
+    #[test]
+    fn test_sirius_is_at_its_real_distance() {
+        // Regression: stars used to be placed at 1000 AU/pc (206x too close), so the HUD
+        // showed Sirius at 0.04 ly. It's 2.637 pc = 8.60 ly.
+        let pos = star_world_pos(6.7525, -16.7161, 2.637);
+        let ly = pos.length() / crate::constants::AU_PER_LY;
+        assert!((ly - 8.60).abs() < 0.01, "Sirius at {ly} ly");
     }
 
     #[test]
@@ -393,7 +440,7 @@ mod tests {
     #[test]
     fn test_solar_radius_units_is_correct_au() {
         // 1 solar radius = 695700 km / 149597870.7 km·AU⁻¹ ≈ 0.004650 AU
-        let expected: f32 = 695_700.0 / 149_597_870.7;
+        let expected: f64 = 695_700.0 / 149_597_870.7;
         assert!(
             (SOLAR_RADIUS_UNITS - expected).abs() < 1e-6,
             "SOLAR_RADIUS_UNITS should be ~0.004650 AU, got {}",
@@ -405,7 +452,8 @@ mod tests {
     fn test_solar_radius_units_not_divided_by_arcsec_factor() {
         // The old buggy formula included / 206_265.0 (arcseconds per radian),
         // shrinking all star spheres by a factor of ~206000.
-        let buggy = 695_700.0_f32 / 149_597_870.7 / 206_265.0 * PARSEC_TO_UNITS;
+        // (with the old 1000 units/pc scale it came from)
+        let buggy = 695_700.0_f64 / 149_597_870.7 / 206_265.0 * 1000.0;
         assert!(
             (SOLAR_RADIUS_UNITS - buggy).abs() > 0.001,
             "SOLAR_RADIUS_UNITS must not be the parsec-formula value {:.2e}",
@@ -416,7 +464,7 @@ mod tests {
     #[test]
     fn test_sun_subtends_half_degree_at_1au() {
         // At 1 AU the Sun's angular diameter should be ≈ 0.53° (0.5–0.6° range).
-        let angle_deg = 2.0 * (SOLAR_RADIUS_UNITS / 1.0_f32).atan().to_degrees();
+        let angle_deg = 2.0 * (SOLAR_RADIUS_UNITS / 1.0_f64).atan().to_degrees();
         assert!(angle_deg > 0.4, "Sun too small at 1 AU: {:.4}°", angle_deg);
         assert!(angle_deg < 0.7, "Sun too large at 1 AU: {:.4}°", angle_deg);
     }
@@ -433,9 +481,9 @@ mod tests {
 
     #[test]
     fn test_visual_radius_scales_up_for_distant_star() {
-        // Sirius: physical radius ≈ 1.711 × 0.00465 AU ≈ 0.00796 AU, distance ≈ 2637 AU
-        let physical: f32 = 1.711 * SOLAR_RADIUS_UNITS;
-        let dist: f32 = 2_637.0;
+        // Sirius: physical radius ≈ 1.711 × 0.00465 AU ≈ 0.00796 AU, distance ≈ 543,920 AU
+        let physical: f32 = 1.711 * SOLAR_RADIUS_UNITS as f32;
+        let dist: f32 = (2.637 * AU_PER_PC) as f32;
         let visual = star_visual_radius(physical, dist);
         assert!(
             visual > physical,
@@ -455,9 +503,9 @@ mod tests {
 
     #[test]
     fn test_visual_radius_ensures_min_angle_for_deneb() {
-        // Deneb: radius ≈ 203 solar radii, distance ≈ 802 pc × 1000 AU/pc = 802_000 AU
-        let physical: f32 = 203.0 * SOLAR_RADIUS_UNITS;
-        let dist: f32 = 802.0 * PARSEC_TO_UNITS;
+        // Deneb: radius ≈ 203 solar radii, distance ≈ 802 pc ≈ 1.65e8 AU
+        let physical: f32 = 203.0 * SOLAR_RADIUS_UNITS as f32;
+        let dist: f32 = (802.0 * AU_PER_PC) as f32;
         let visual = star_visual_radius(physical, dist);
         let angle = visual / dist;
         assert!(
@@ -486,6 +534,15 @@ mod tests {
             (b1 / b2 - 4.0).abs() < 0.001,
             "brightness should follow inverse-square law"
         );
+    }
+
+    #[test]
+    fn test_star_brightness_is_capped_near_a_star() {
+        // Sirius from 0.06 AU (~3e-7 pc) must not blow out the screen.
+        assert_eq!(star_brightness(1.0, 25.4, 3.0e-7), MAX_STAR_BRIGHTNESS);
+        // Vega from Earth keeps its calibrated value (~0.34 at EV 0).
+        let vega = star_brightness(1.0, 40.12, 7.68);
+        assert!((vega - 0.34).abs() < 0.01, "vega {vega}");
     }
 
     #[test]

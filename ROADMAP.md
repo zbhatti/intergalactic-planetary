@@ -22,9 +22,14 @@ with luminosity-based brightness and exposure control, 2000 random decorative ba
 labels, search + auto-orient to target, on-screen reticle and off-screen arrow,
 distance/speed/exposure HUD, pause menu, F12 screenshots. Positions are f32 with 1 pc = 1000 units.
 
-## Phase 1 — Scale foundation
+## Phase 1 — Scale foundation ✅ (2026-10-16)
 
 Without these, nothing beyond the Milky Way is reachable or renders without jitter.
+
+Done: f64 `WorldPos` + hand-rolled floating origin (no `big_space` dependency, ~150 lines),
+nearest-surface adaptive speed with throttle, G go-to with log-distance travel, HUD to Mly/Gly,
+far plane 1e15 AU. Also fixed the star distance scale: it was compressed to 1000 AU/pc and is now
+the real 206,265. Headless tests fly to a body ~5 Mpc away and check arrival and render precision.
 
 | # | Feature | Check in SE | IP today | GPU |
 |---|---|---|---|---|
@@ -40,13 +45,14 @@ Without these, nothing beyond the Milky Way is reachable or renders without jitt
 | 5 | **Selection by clicking** objects/labels + **object info panel** (type, radius, mass, temperature, luminosity, spectral class, distance) | Click object → info panel | Search only; name + distance | Low |
 | 6 | **Major moons, dwarf planets, notable small bodies**, parented to their primaries. Static positions at the epoch date until Phase 5 | Solar system browser / planet tree | Planets only | Low |
 | 7 | **Solar system browser**: tree of star → planets → moons, click to select | Solar system browser window | None | Low |
-| 8 | **Larger star catalog**: HYG (~120k stars) with GPU instancing; only the brightest get labels | Night sky density from Earth | 58 stars | Med — profile on iGPU |
+| 8 | **Larger star catalog**: HYG (~120k stars) as **one instanced draw with camera-relative positions on the GPU**, not 120k entities. Measured in Phase 1: a full rebase over 120k entities costs 3.4 ms/frame on the i7-6600U. Only the brightest get labels | Night sky density from Earth | 58 stars | Med — profile on iGPU |
 | 9 | **Exoplanet systems** from the NASA Exoplanet Archive attached to their host stars | Visit a known exoplanet host | None | Low–Med |
 | 10 | **Field of view zoom** (mouse wheel), FOV in HUD | Zoom in on a distant object | Fixed FOV | Low |
 | 11 | **Label/marker filtering** by type and by distance/brightness — essential once there are 10^5+ objects | Label/marker settings | One on/off toggle | Low |
 | 12 | **Coordinate grids and constellation lines** (equatorial/ecliptic/galactic, IAU lines) | Grid and constellation toggles | None | Low (gizmos) |
 | 13 | **Star browser**: nearest/brightest stars around the camera, sortable, click to go | Star browser window | None | Low |
 | 14 | **Bookmarks / saved locations** (position, orientation, target) | Locations / bookmarks | None | Low |
+| 14a | **Auto-exposure** (eye adaptation from the brightest visible flux, computed on the CPU) to replace the fixed close-range brightness cap | Approach a star: the sky dims, then the star's disk becomes visible | Manual EV + cap | Low |
 
 ## Phase 3 — Real content, large scale (Milky Way → Laniakea)
 
@@ -73,6 +79,7 @@ fitted to known objects.
 | 21 | **Simulated galaxies** | Fill regions and magnitudes the surveys miss, following an observed luminosity function and morphology mix, clustered to follow the real large-scale structure from #18 rather than placed uniformly |
 | 22 | **Clear real vs. simulated distinction** | Info panel and labels mark simulated objects; search defaults to real objects |
 | 23 | **Reproducible generation** | Fixed seed, so every run and every machine sees the same universe; generator is an offline tool with tests for its distributions |
+| 23a | **Star-local frames** | Planets of simulated (or exoplanet) systems far from the Sun need positions relative to their star. f64 heliocentric coordinates only resolve ~2000 km at 0.5 Mpc |
 
 Open design choice: one **pre-generated data file** (simple, but caps the count to what's
 reasonable to ship — millions, not 10^11), or **seeded generation per spatial cell** at runtime (same

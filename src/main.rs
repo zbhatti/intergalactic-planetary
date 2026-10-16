@@ -1,7 +1,10 @@
 use bevy::prelude::*;
+use coords::NavSet;
 
 mod camera;
 mod constants;
+mod coords;
+mod goto;
 mod menu;
 mod navigation;
 mod perf;
@@ -22,7 +25,7 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(perf::PerfPlugin)
+        .add_plugins((coords::CoordsPlugin, goto::GoToPlugin, perf::PerfPlugin))
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(camera::CursorLocked(true))
         .insert_resource(camera::ScreenshotCounter::default())
@@ -34,6 +37,7 @@ fn main() {
         .insert_resource(search::Search::default())
         .insert_resource(search::ObjectCatalog::default())
         .insert_resource(speed::SpeedState::default())
+        .init_resource::<speed::CurrentSpeed>()
         .insert_resource(stars::ExposureSettings::default())
         .insert_resource(menu::MenuOpen::default())
         .insert_resource(menu::ShowBackgroundStars::default())
@@ -59,22 +63,38 @@ fn main() {
                 menu::update_pause_menu_visibility,
                 menu::handle_menu_buttons,
                 stars::update_background_star_visibility,
-                speed::cycle_speed,
                 stars::adjust_exposure,
                 search::handle_search,
-                navigation::orient_camera_to_target,
-                navigation::update_target_reticle,
                 search::update_search_ui,
+                camera::take_screenshot,
+            ),
+        )
+        // Camera movement in world space. GoToPlugin adds its systems to this set too.
+        .add_systems(
+            Update,
+            (
+                speed::cycle_speed,
+                speed::update_current_speed,
+                navigation::orient_camera_to_target,
+                camera::mouse_look,
+                camera::fly_camera.after(goto::update_goto),
+            )
+                .in_set(NavSet::Input)
+                .after(search::handle_search),
+        )
+        // Everything that reads final positions for this frame.
+        .add_systems(
+            Update,
+            (
+                stars::update_star_brightness,
+                stars::update_star_labels,
+                navigation::update_target_reticle,
+                navigation::draw_offscreen_arrow,
                 ui::update_distance_label,
                 ui::update_speed_label,
                 ui::update_exposure_label,
-                stars::update_star_brightness,
-                stars::update_star_labels,
-                camera::fly_camera,
-                camera::mouse_look,
-                camera::take_screenshot,
-                navigation::draw_offscreen_arrow,
-            ),
+            )
+                .in_set(NavSet::View),
         )
         .run();
 }
