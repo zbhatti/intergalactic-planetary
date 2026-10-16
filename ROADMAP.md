@@ -43,7 +43,7 @@ the real 206,265. Headless tests fly to a body ~5 Mpc away and check arrival and
 | # | Feature | Check in SE | IP today | GPU |
 |---|---|---|---|---|
 | 5 | ✅ **Selection by clicking** objects/labels + **object info panel** (type, radius, mass, temperature, luminosity, spectral class, distance) | Click object → info panel | Center-crosshair click + I panel. Star temperature derived from L and R | Low |
-| 6 | **Major moons, dwarf planets, notable small bodies**, parented to their primaries. Static positions at the epoch date until Phase 5 | Solar system browser / planet tree | Planets only | Low |
+| 6 | ✅ **Major moons, dwarf planets, notable small bodies**, parented to their primaries. Static positions at the epoch date until Phase 5 | Solar system browser / planet tree | 21 moons + 5 dwarf planets from JPL elements; also fixed a mirrored sky, planets in the equator plane, and wrong Mercury/Venus/Earth positions. Comets/asteroids still to do | Low |
 | 7 | **Solar system browser**: tree of star → planets → moons, click to select | Solar system browser window | None | Low |
 | 8 | **Larger star catalog**: HYG (~120k stars) as **one instanced draw with camera-relative positions on the GPU**, not 120k entities. Measured in Phase 1: a full rebase over 120k entities costs 3.4 ms/frame on the i7-6600U. Only the brightest get labels | Night sky density from Earth | 58 stars | Med — profile on iGPU |
 | 9 | **Exoplanet systems** from the NASA Exoplanet Archive attached to their host stars | Visit a known exoplanet host | None | Low–Med |

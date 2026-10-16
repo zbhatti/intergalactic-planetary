@@ -51,14 +51,20 @@ Precision: f64 resolves ~150 m out to ~50 pc but only ~2000 km at ~0.5 Mpc. Plan
 need star-local frames (see `coords.rs` docs). The camera's frustum `far` is 1e15 AU: Bevy culls past `far`
 even though depth is infinite reverse-Z, so it must exceed the farthest object.
 
-The Sun is at the origin. Planets orbit in the XZ plane (Y = 0). Star positions are converted from real RA/Dec/distance catalog data using spherical coordinates:
+The Sun is at the origin. The world frame is **equatorial J2000/ICRF with +Y = north celestial pole**:
+`world = (x_eq, z_eq, -y_eq)` (`orbit::equatorial_to_world`). That's a rotation. An earlier `(x_eq, z_eq, y_eq)`
+mapping was a mirror image of the real sky (Orion appeared flipped), and `test_sky_is_not_mirrored` guards it.
+Planets orbit near the **ecliptic**, tilted 23.44° from the equator (`orbit::ecliptic_to_world`), not in the XZ plane.
 
 ```rust
-// ra_hours → radians; dec_deg → radians; dist_pc → AU
-x = d * cos(dec) * cos(ra)
-y = d * sin(dec)
-z = d * cos(dec) * sin(ra)
+// stars: RA/Dec/distance -> world AU
+star_world_pos(ra_h, dec, d_pc) = equatorial_to_world(radec_to_equatorial(ra_h * 15, dec)) * d_pc * AU_PER_PC
 ```
+
+Solar-system bodies come from published orbital elements evaluated with a Kepler solver at `orbit::SCENE_JD`
+(2026-06-25): planets from the JPL Standish table, dwarf planets from JPL SBDB, and moons from JPL satellite
+mean elements in each planet's Laplace/equatorial plane. Don't hand-enter positions. Mercury, Venus and Earth were
+once wrong by 80–250° that way.
 
 Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch around X. The yaw/pitch extraction from a direction vector must match this: `yaw = atan2(-dx, -dz)`, `pitch = asin(dy)`.
 
@@ -74,7 +80,8 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `camera.rs` | `FlyCam` component, `CursorLocked` resource, camera spawn + WASD movement in world space |
 | `search.rs` | `Search` + `ObjectCatalog` resources, search UI, `catalog_matches` |
 | `speed.rs` | Distance-adaptive speed (`CurrentSpeed`), Shift-to-cycle throttle |
-| `solar_system.rs` | Spawns Sun + 8 planets with heliocentric positions for 2026-06-25 |
+| `orbit.rs` | Reference frames (equatorial/ecliptic → world), Kepler solver, `Elements`, `SCENE_JD` |
+| `solar_system.rs` | Sun, 8 planets, 5 dwarf planets, 21 major moons from JPL elements; min apparent size for bodies |
 | `stars.rs` | 58-star catalog, `star_world_pos`, brightness model, dynamic scaling |
 | `ui.rs` | Distance/speed/exposure HUD labels, `format_distance`, `format_speed` |
 | `navigation.rs` | HUD reticle, off-screen arrow gizmo, camera auto-orient |

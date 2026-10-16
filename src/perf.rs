@@ -36,6 +36,8 @@ pub struct Bench {
     pub frame_ms: Vec<f32>,
     pub screenshot_taken: bool,
     pub tour_idx: usize,
+    /// Go-to targets, looped. `IP_BENCH_TOUR=Saturn,Titan` overrides [`BENCH_TOUR`].
+    pub tour: Vec<String>,
 }
 
 impl Bench {
@@ -48,6 +50,9 @@ impl Bench {
             frame_ms: Vec::new(),
             screenshot_taken: false,
             tour_idx: 0,
+            tour: std::env::var("IP_BENCH_TOUR")
+                .map(|t| t.split(',').map(|n| n.trim().to_string()).collect())
+                .unwrap_or_else(|_| BENCH_TOUR.iter().map(|n| n.to_string()).collect()),
         })
     }
 }
@@ -170,16 +175,19 @@ pub fn bench_drive_camera(
     let Ok((cam_pos, cam_t)) = cam.single() else {
         return;
     };
-    let name = BENCH_TOUR[bench.tour_idx % BENCH_TOUR.len()];
+    if bench.tour.is_empty() {
+        return;
+    }
+    let name = bench.tour[bench.tour_idx % bench.tour.len()].clone();
     bench.tour_idx += 1;
-    let Some(&(_, entity)) = catalog.0.iter().find(|(n, _)| n == name) else {
+    let Some(&(_, entity)) = catalog.0.iter().find(|(n, _)| *n == name) else {
         return;
     };
     let Ok((target_pos, radius)) = targets.get(entity) else {
         return;
     };
     search.target = Some(entity);
-    search.target_name = Some(name.to_string());
+    search.target_name = Some(name);
     goto.0 = Some(Flight::new(
         entity,
         cam_pos.0,

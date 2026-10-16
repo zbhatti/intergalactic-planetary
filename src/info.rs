@@ -13,6 +13,8 @@ use bevy::window::PrimaryWindow;
 pub enum BodyKind {
     Star,
     Planet,
+    DwarfPlanet,
+    Moon,
 }
 
 impl BodyKind {
@@ -20,6 +22,8 @@ impl BodyKind {
         match self {
             BodyKind::Star => "Star",
             BodyKind::Planet => "Planet",
+            BodyKind::DwarfPlanet => "Dwarf planet",
+            BodyKind::Moon => "Moon",
         }
     }
 }
