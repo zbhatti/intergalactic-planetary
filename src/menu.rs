@@ -33,6 +33,7 @@ pub struct PauseMenu;
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MenuItem {
     CatalogStars,
+    MilkyWay,
     Nebulae,
     Labels,
     PlanetLabels,
@@ -61,8 +62,9 @@ pub struct MenuSettings<'a> {
 }
 
 impl MenuItem {
-    pub const TOGGLES: [MenuItem; 15] = [
+    pub const TOGGLES: [MenuItem; 16] = [
         MenuItem::CatalogStars,
+        MenuItem::MilkyWay,
         MenuItem::Nebulae,
         MenuItem::Labels,
         MenuItem::PlanetLabels,
@@ -90,6 +92,7 @@ impl MenuItem {
     ) -> String {
         match self {
             MenuItem::CatalogStars => checkbox_text(CATALOG_STARS_LABEL, stars.0),
+            MenuItem::MilkyWay => checkbox_text("Milky Way glow (modelled)", sky.milky_way),
             MenuItem::Nebulae => checkbox_text("Nebulae", nebulae.0),
             MenuItem::Labels => checkbox_text("Labels (L)", labels.enabled),
             MenuItem::PlanetLabels => checkbox_text("  Planet labels", labels.planets),
@@ -123,6 +126,7 @@ impl MenuItem {
         } = s;
         match self {
             MenuItem::CatalogStars => stars.0 = !stars.0,
+            MenuItem::MilkyWay => sky.milky_way = !sky.milky_way,
             MenuItem::Nebulae => nebulae.0 = !nebulae.0,
             MenuItem::Labels => labels.enabled = !labels.enabled,
             MenuItem::PlanetLabels => labels.planets = !labels.planets,
@@ -186,7 +190,7 @@ fn menu_button(p: &mut ChildSpawnerCommands, item: MenuItem) {
 }
 
 /// Toggles in the left column (catalog and labels); the rest go on the right (sky and camera).
-const LEFT_COLUMN: usize = 9;
+const LEFT_COLUMN: usize = 10;
 
 pub fn setup_pause_menu(mut commands: Commands) {
     commands

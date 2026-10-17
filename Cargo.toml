@@ -32,6 +32,11 @@ bevy = { version = "0.16", default-features = false, features = [
 # `dev` (on by default) links Bevy dynamically for fast incremental builds.
 # Release builds turn it off so the binary runs standalone:
 #   cargo build --release --no-default-features
+# Already in the dependency tree (winit, wgpu): lowers the Milky Way glow's background thread to
+# nice 19 so it only uses idle CPU (milky_way.rs).
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
 [features]
 default = ["dev"]
 dev = ["bevy/dynamic_linking"]

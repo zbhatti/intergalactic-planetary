@@ -31,13 +31,27 @@ static CONSTELLATIONS_TXT: &str = include_str!("../data/constellations.txt");
 /// a close star's sphere).
 const SKY_RADIUS_AU: f32 = 1000.0;
 
-#[derive(Resource, Debug, Clone, PartialEq, Default)]
+#[derive(Resource, Debug, Clone, PartialEq)]
 pub struct SkySettings {
     pub equatorial_grid: bool,
     pub ecliptic_grid: bool,
     pub galactic_grid: bool,
     /// Figures and names (C key).
     pub constellations: bool,
+    /// The modelled glow of unresolved stars (`milky_way.rs`).
+    pub milky_way: bool,
+}
+
+impl Default for SkySettings {
+    fn default() -> Self {
+        Self {
+            equatorial_grid: false,
+            ecliptic_grid: false,
+            galactic_grid: false,
+            constellations: false,
+            milky_way: true,
+        }
+    }
 }
 
 /// A sky coordinate frame: its basis vectors in world space.
