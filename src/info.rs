@@ -173,6 +173,7 @@ pub struct Crosshair;
 pub fn setup_info_ui(mut commands: Commands) {
     commands.spawn((
         InfoPanel,
+        crate::labels::LabelBlocker,
         Text::new(""),
         TextFont {
             font_size: 15.0,

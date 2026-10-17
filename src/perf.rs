@@ -8,8 +8,10 @@
 use crate::camera::FlyCam;
 use crate::coords::{BodyRadius, NavSet, WorldPos};
 use crate::goto::{Flight, GoTo};
-use crate::menu::{ShowCatalogStars, ShowStarLabels};
+use crate::labels::LabelSettings;
+use crate::menu::ShowCatalogStars;
 use crate::search::{ObjectCatalog, Search};
+use crate::zoom::CameraFov;
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
 use bevy::prelude::*;
@@ -103,6 +105,7 @@ pub fn record_frame_time(time: Res<Time>, mut stats: ResMut<FrameStats>) {
 pub fn setup_perf_overlay(mut commands: Commands) {
     commands.spawn((
         PerfOverlay,
+        crate::labels::LabelBlocker,
         Text::new(""),
         TextFont {
             font_size: 14.0,
@@ -152,7 +155,7 @@ pub fn update_perf_overlay(
     }
 }
 
-/// Benchmark setup: worst-case visibility (all labels and the catalog starfield on).
+/// Benchmark setup: worst-case visibility (all labels down to mag 6, and the catalog starfield).
 /// Keys `IP_BENCH_KEYS` can press at startup (e.g. `IP_BENCH_KEYS=B,I`), to put UI panels
 /// in the benchmark screenshot.
 pub fn bench_key(name: &str) -> Option<KeyCode> {
@@ -167,12 +170,21 @@ pub fn bench_key(name: &str) -> Option<KeyCode> {
 
 pub fn bench_setup(
     mut bg: ResMut<ShowCatalogStars>,
-    mut labels: ResMut<ShowStarLabels>,
+    mut labels: ResMut<LabelSettings>,
     mut overlay: ResMut<ShowPerfOverlay>,
+    mut fov: ResMut<CameraFov>,
     mut keys: EventWriter<KeyboardInput>,
 ) {
+    // `IP_BENCH_FOV=<degrees>`: zoomed-in screenshots.
+    if let Some(deg) = std::env::var("IP_BENCH_FOV")
+        .ok()
+        .and_then(|d| d.parse::<f32>().ok())
+    {
+        *fov = CameraFov(deg.to_radians()).zoomed(0.0);
+    }
     bg.0 = true;
-    labels.0 = true;
+    labels.enabled = true;
+    labels.star_mag_limit = 6.0;
     overlay.0 = true;
     let names = std::env::var("IP_BENCH_KEYS").unwrap_or_default();
     for key_code in names.split(',').filter_map(|n| bench_key(n.trim())) {

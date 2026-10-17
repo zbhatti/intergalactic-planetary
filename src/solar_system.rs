@@ -10,9 +10,11 @@ use crate::camera::FlyCam;
 use crate::constants::KM_PER_AU;
 use crate::coords::{BodyRadius, WorldPos};
 use crate::info::{BodyInfo, BodyKind, format_mass, format_sig, surface_gravity};
+use crate::labels::{LabelLum, spawn_label};
 use crate::orbit::{Elements, J2000_JD, RefPlane, SCENE_JD};
 use crate::search::ObjectCatalog;
-use crate::stars::{LabelRange, StarLabelFor, star_visual_radius};
+use crate::stars::star_visual_radius;
+use crate::zoom::{CameraFov, min_star_angle};
 use bevy::math::DVec3;
 use bevy::prelude::*;
 
@@ -145,27 +147,25 @@ const MOONS: &[MoonRow] = &[
     ("Charon", "Pluto", 19600.0, 0.000, 0.0, 304.1, 0.0, 0.0, 6.387222, Some(PLUTO_EQUATOR), 606.0, 1.586e21),
 ];
 
-/// Moon labels only show within this many orbit radii of the moon, so they don't pile up on
-/// the planet's label from afar.
-const MOON_LABEL_RANGE_ORBITS: f64 = 200.0;
-
 /// Planets, dwarf planets and moons: drawn at least MIN_STAR_ANGLE wide so they stay visible
 /// as points from afar, like stars.
 #[derive(Component)]
 pub struct MinAngularSize;
 
-/// Rescales bodies to their minimum apparent size; runs only when the camera moved.
+/// Rescales bodies to their minimum apparent size; runs only when the camera moved or zoomed.
 pub fn update_body_visual_size(
     cam: Query<Ref<WorldPos>, With<FlyCam>>,
+    fov: Res<CameraFov>,
     mut bodies: Query<(&WorldPos, &BodyRadius, &mut Transform), With<MinAngularSize>>,
 ) {
     let Ok(cam) = cam.single() else { return };
-    if !cam.is_changed() {
+    if !cam.is_changed() && !fov.is_changed() {
         return;
     }
+    let min_angle = min_star_angle(fov.0);
     for (pos, radius, mut transform) in &mut bodies {
         let physical = radius.0 as f32;
-        let visual = star_visual_radius(physical, pos.0.distance(cam.0) as f32);
+        let visual = star_visual_radius(physical, pos.0.distance(cam.0) as f32, min_angle);
         let scale = Vec3::splat(visual / physical);
         if transform.scale != scale {
             transform.scale = scale;
@@ -193,7 +193,6 @@ impl Spawner<'_, '_, '_> {
         radius_km: f64,
         material: Handle<StandardMaterial>,
         info: BodyInfo,
-        label_range: Option<f64>,
         orbit: Option<OrbitOf>,
     ) -> Entity {
         let radius_au = radius_km / KM_PER_AU;
@@ -207,27 +206,11 @@ impl Spawner<'_, '_, '_> {
             info,
             MinAngularSize,
         ));
-        if let Some(range) = label_range {
-            entity.insert(LabelRange(range));
-        }
         if let Some(orbit) = orbit {
             entity.insert(orbit);
         }
         let entity = entity.id();
-        self.commands.spawn((
-            StarLabelFor(entity),
-            Text::new(name.clone()),
-            TextFont {
-                font_size: 13.0,
-                ..default()
-            },
-            TextColor(Color::srgba(1.0, 0.9, 0.7, 0.85)),
-            Node {
-                position_type: PositionType::Absolute,
-                ..default()
-            },
-            Visibility::Hidden,
-        ));
+        spawn_label(self.commands, entity, &name);
         self.catalog.0.push((name, entity));
         entity
     }
@@ -273,8 +256,8 @@ pub fn setup_solar_system(
             facts: sun_facts,
         },
         None,
-        None,
     );
+    sp.commands.entity(sun).insert(LabelLum(1.0));
     spawned.push(("Sun", DVec3::ZERO, sun));
 
     for &(name, base, rates, radius_km, mass_kg, temp_k, [r, g, b]) in PLANETS {
@@ -301,7 +284,6 @@ pub fn setup_solar_system(
                 kind: BodyKind::Planet,
                 facts,
             },
-            None,
             Some(OrbitOf {
                 primary: sun,
                 a_au: el.a_au,
@@ -343,7 +325,6 @@ pub fn setup_solar_system(
                 kind: BodyKind::DwarfPlanet,
                 facts,
             },
-            None,
             Some(OrbitOf {
                 primary: sun,
                 a_au: a,
@@ -389,7 +370,6 @@ pub fn setup_solar_system(
                 kind: BodyKind::Moon,
                 facts,
             },
-            Some(a_au * MOON_LABEL_RANGE_ORBITS),
             Some(OrbitOf {
                 primary: parent_entity,
                 a_au,

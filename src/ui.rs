@@ -4,6 +4,7 @@ use crate::coords::WorldPos;
 use crate::search::Search;
 use crate::speed::{CurrentSpeed, SpeedState};
 use crate::stars::ExposureSettings;
+use crate::zoom::CameraFov;
 use bevy::prelude::*;
 
 #[derive(Component)]
@@ -72,6 +73,7 @@ pub fn format_speed(au_per_sec: f64) -> String {
 pub fn setup_distance_label(mut commands: Commands) {
     commands.spawn((
         DistanceLabel,
+        crate::labels::LabelBlocker,
         Text::new(""),
         TextFont {
             font_size: 18.0,
@@ -91,6 +93,7 @@ pub fn setup_distance_label(mut commands: Commands) {
 pub fn setup_speed_label(mut commands: Commands) {
     commands.spawn((
         SpeedLabel,
+        crate::labels::LabelBlocker,
         Text::new(""),
         TextFont {
             font_size: 18.0,
@@ -109,6 +112,7 @@ pub fn setup_speed_label(mut commands: Commands) {
 pub fn setup_exposure_label(mut commands: Commands) {
     commands.spawn((
         ExposureLabel,
+        crate::labels::LabelBlocker,
         Text::new(""),
         TextFont {
             font_size: 18.0,
@@ -159,14 +163,23 @@ pub fn update_speed_label(
     );
 }
 
+/// Exposure and zoom readout. Rewrites the text only when either changes (a text write
+/// triggers a re-layout).
 pub fn update_exposure_label(
     exposure: Res<ExposureSettings>,
+    fov: Res<CameraFov>,
     mut label_query: Query<&mut Text, With<ExposureLabel>>,
 ) {
     let Ok(mut text) = label_query.single_mut() else {
         return;
     };
-    text.0 = format!("{} [ / ]", exposure.label());
+    if exposure.is_changed() || fov.is_changed() || text.0.is_empty() {
+        text.0 = exposure_text(&exposure, *fov);
+    }
+}
+
+pub fn exposure_text(exposure: &ExposureSettings, fov: CameraFov) -> String {
+    format!("{}  {} [ / ]", fov.label(), exposure.label())
 }
 
 #[cfg(test)]
@@ -174,6 +187,12 @@ mod tests {
     use super::*;
 
     // --- distance formatting ---
+
+    #[test]
+    fn test_exposure_text_shows_fov() {
+        let t = exposure_text(&ExposureSettings::default(), CameraFov::default());
+        assert_eq!(t, "FOV 45 deg  EV+0 [ / ]");
+    }
 
     #[test]
     fn test_format_distance_1ly() {

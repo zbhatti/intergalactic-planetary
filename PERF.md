@@ -16,7 +16,7 @@ cargo test --release -- --ignored --nocapture perf_   # CPU micro-benchmarks for
   watch: `p95`/`max` creeping toward or past 16.7 ms, and `hitches` (frames > 1.5x median).
 - Bench mode turns on every label and the background stars (worst case), then loops a go-to tour
   (override with `IP_BENCH_TOUR=Saturn,Titan` to screenshot specific objects, or `IP_BENCH_LOOK=Betelgeuse`
-  to stay 1 AU from the Sun and just turn toward a target, for the sky as seen from home; `IP_BENCH_KEYS=B,I`
+  to stay 1 AU from the Sun and just turn toward a target, for the sky as seen from home; `IP_BENCH_FOV=2` to zoom to a 2 deg field of view; `IP_BENCH_KEYS=B,I`
   presses keys at startup to put UI panels in the screenshot)
   (Earth -> Jupiter -> Sirius -> Deneb -> Sun) that covers planetary to ~800 pc scales.
   Before Phase 1 (2026-10-16 baseline) it panned 360 degrees instead, so rows before and after
@@ -40,6 +40,7 @@ cargo test --release -- --ignored --nocapture perf_   # CPU micro-benchmarks for
 | 2026-10-16 | Phase 2.5: named HYG entities (+483), sphere proxy, additive starfield (tour: Barnard's Star) | release | 720 | 16.67 | 17.45 | 21.67 | 0 | 1318 |
 | 2026-10-17 | Old-GPU fixes (#10, #11): Vulkan | release | 1201 | 16.67 | 17.62 | 22.28 | 0 | 1319 |
 | 2026-10-17 | Old-GPU fixes: `WGPU_BACKEND=gl` (bloom off, no GPU culling) | release | 1192 | 16.78 | 17.02 | 34.41 | 4 | 1319 |
+| 2026-10-17 | Phase 2.10-11: zoom, filtered/decluttered labels (+540 named-star labels, mag limit 6 in bench) | release | 1200 | 16.67 | 17.64 | 18.89 | 0 | 1810 |
 
 ## Micro-benchmarks (`cargo test --release -- --ignored --nocapture perf_`)
 

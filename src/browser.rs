@@ -61,6 +61,7 @@ const VISIBLE_ROWS: usize = 24;
 pub fn setup_browser_ui(mut commands: Commands) {
     commands.spawn((
         BrowserPanel,
+        crate::labels::LabelBlocker,
         Text::new(""),
         TextFont {
             font_size: 15.0,
