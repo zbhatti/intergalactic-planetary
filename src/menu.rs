@@ -1,5 +1,6 @@
 use crate::camera::CursorLocked;
 use crate::labels::LabelSettings;
+use crate::nebulae::ShowNebulae;
 use crate::search::Search;
 use crate::sky::SkySettings;
 use crate::stars::ExposureSettings;
@@ -11,7 +12,7 @@ pub struct MenuOpen(pub bool);
 pub const CATALOG_STARS_LABEL: &str = "Catalog stars (HYG)";
 
 /// Attribution required by the CC BY-SA 4.0 licenses of the embedded star and constellation data.
-pub const DATA_CREDIT: &str = "Star data: HYG Database v4.4 (c) astronexus.com, CC BY-SA 4.0\nConstellation figures: Stellarium (modern sky culture), CC BY-SA 4.0\nExoplanets: NASA Exoplanet Archive (Caltech, under contract with NASA)\nOrbits: NASA/JPL Solar System Dynamics";
+pub const DATA_CREDIT: &str = "Star data: HYG Database v4.4 (c) astronexus.com, CC BY-SA 4.0\nConstellation figures: Stellarium (modern sky culture), CC BY-SA 4.0\nExoplanets: NASA Exoplanet Archive (Caltech, under contract with NASA)\nNebulae: Sharpless, van den Bergh, Mendez-Delgado+ 2022 et al. via VizieR (CDS)\nOrbits: NASA/JPL Solar System Dynamics";
 
 /// Whether the HYG catalog starfield (~109k real stars) is rendered. On by default.
 #[derive(Resource)]
@@ -31,10 +32,12 @@ pub struct PauseMenu;
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MenuItem {
     CatalogStars,
+    Nebulae,
     Labels,
     PlanetLabels,
     MoonLabels,
     SmallBodyLabels,
+    NebulaLabels,
     StarLabels,
     StarMagLimit,
     Constellations,
@@ -51,15 +54,18 @@ pub struct MenuSettings<'a> {
     pub labels: &'a mut LabelSettings,
     pub sky: &'a mut SkySettings,
     pub exposure: &'a mut ExposureSettings,
+    pub nebulae: &'a mut ShowNebulae,
 }
 
 impl MenuItem {
-    pub const TOGGLES: [MenuItem; 12] = [
+    pub const TOGGLES: [MenuItem; 14] = [
         MenuItem::CatalogStars,
+        MenuItem::Nebulae,
         MenuItem::Labels,
         MenuItem::PlanetLabels,
         MenuItem::MoonLabels,
         MenuItem::SmallBodyLabels,
+        MenuItem::NebulaLabels,
         MenuItem::StarLabels,
         MenuItem::StarMagLimit,
         MenuItem::Constellations,
@@ -75,15 +81,18 @@ impl MenuItem {
         labels: &LabelSettings,
         sky: &SkySettings,
         exposure: &ExposureSettings,
+        nebulae: &ShowNebulae,
     ) -> String {
         match self {
             MenuItem::CatalogStars => checkbox_text(CATALOG_STARS_LABEL, stars.0),
+            MenuItem::Nebulae => checkbox_text("Nebulae", nebulae.0),
             MenuItem::Labels => checkbox_text("Labels (L)", labels.enabled),
             MenuItem::PlanetLabels => checkbox_text("  Planet labels", labels.planets),
             MenuItem::MoonLabels => checkbox_text("  Moon labels", labels.moons),
             MenuItem::SmallBodyLabels => {
                 checkbox_text("  Asteroid and comet labels", labels.small_bodies)
             }
+            MenuItem::NebulaLabels => checkbox_text("  Nebula labels", labels.nebulae),
             MenuItem::StarLabels => checkbox_text("  Star labels", labels.stars),
             MenuItem::StarMagLimit => {
                 format!("  Label stars brighter than mag {}", labels.star_mag_limit)
@@ -103,13 +112,16 @@ impl MenuItem {
             labels,
             sky,
             exposure,
+            nebulae,
         } = s;
         match self {
             MenuItem::CatalogStars => stars.0 = !stars.0,
+            MenuItem::Nebulae => nebulae.0 = !nebulae.0,
             MenuItem::Labels => labels.enabled = !labels.enabled,
             MenuItem::PlanetLabels => labels.planets = !labels.planets,
             MenuItem::MoonLabels => labels.moons = !labels.moons,
             MenuItem::SmallBodyLabels => labels.small_bodies = !labels.small_bodies,
+            MenuItem::NebulaLabels => labels.nebulae = !labels.nebulae,
             MenuItem::StarLabels => labels.stars = !labels.stars,
             MenuItem::StarMagLimit => labels.star_mag_limit = labels.next_mag_limit(),
             MenuItem::Constellations => sky.constellations = !sky.constellations,
@@ -256,29 +268,37 @@ pub fn sync_menu_text(
     labels: Res<LabelSettings>,
     sky: Res<SkySettings>,
     exposure: Res<ExposureSettings>,
+    nebulae: Res<ShowNebulae>,
     mut texts: Query<(&MenuItemText, &mut Text)>,
     mut last_auto: Local<Option<bool>>,
 ) {
     // Exposure changes every frame while auto-exposure adapts; only the on/off matters here.
     let exposure_toggled = exposure.is_changed() && *last_auto != Some(exposure.auto);
     *last_auto = Some(exposure.auto);
-    if !stars.is_changed() && !labels.is_changed() && !sky.is_changed() && !exposure_toggled {
+    if !stars.is_changed()
+        && !labels.is_changed()
+        && !sky.is_changed()
+        && !exposure_toggled
+        && !nebulae.is_changed()
+    {
         return;
     }
     for (item, mut text) in &mut texts {
-        let wanted = item.0.text(&stars, &labels, &sky, &exposure);
+        let wanted = item.0.text(&stars, &labels, &sky, &exposure, &nebulae);
         if text.0 != wanted {
             text.0 = wanted;
         }
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn handle_menu_buttons(
     mut buttons: Query<(&Interaction, &mut BackgroundColor, &MenuItem), Changed<Interaction>>,
     mut stars: ResMut<ShowCatalogStars>,
     mut labels: ResMut<LabelSettings>,
     mut sky: ResMut<SkySettings>,
     mut exposure: ResMut<ExposureSettings>,
+    mut nebulae: ResMut<ShowNebulae>,
     mut exit: EventWriter<AppExit>,
     menu_open: Res<MenuOpen>,
 ) {
@@ -297,6 +317,7 @@ pub fn handle_menu_buttons(
                     labels: &mut labels,
                     sky: &mut sky,
                     exposure: &mut exposure,
+                    nebulae: &mut nebulae,
                 });
             }
             Interaction::Hovered => {
@@ -332,8 +353,9 @@ mod tests {
         let mut labels = LabelSettings::default();
         let mut sky = SkySettings::default();
         let mut exposure = ExposureSettings::default();
+        let mut nebulae = ShowNebulae::default();
         assert_eq!(
-            MenuItem::MoonLabels.text(&stars, &labels, &sky, &exposure),
+            MenuItem::MoonLabels.text(&stars, &labels, &sky, &exposure, &nebulae),
             "[x]   Moon labels"
         );
         MenuItem::MoonLabels.apply(MenuSettings {
@@ -341,10 +363,11 @@ mod tests {
             labels: &mut labels,
             sky: &mut sky,
             exposure: &mut exposure,
+            nebulae: &mut nebulae,
         });
         assert!(!labels.moons);
         assert_eq!(
-            MenuItem::MoonLabels.text(&stars, &labels, &sky, &exposure),
+            MenuItem::MoonLabels.text(&stars, &labels, &sky, &exposure, &nebulae),
             "[ ]   Moon labels"
         );
         MenuItem::CatalogStars.apply(MenuSettings {
@@ -352,17 +375,22 @@ mod tests {
             labels: &mut labels,
             sky: &mut sky,
             exposure: &mut exposure,
+            nebulae: &mut nebulae,
         });
         MenuItem::GalacticGrid.apply(MenuSettings {
             stars: &mut stars,
             labels: &mut labels,
             sky: &mut sky,
             exposure: &mut exposure,
+            nebulae: &mut nebulae,
         });
         assert!(sky.galactic_grid);
         assert!(!stars.0);
         for item in MenuItem::TOGGLES {
-            assert!(item.text(&stars, &labels, &sky, &exposure).is_ascii());
+            assert!(
+                item.text(&stars, &labels, &sky, &exposure, &nebulae)
+                    .is_ascii()
+            );
         }
     }
 
@@ -374,6 +402,7 @@ mod tests {
             .init_resource::<LabelSettings>()
             .init_resource::<SkySettings>()
             .init_resource::<ExposureSettings>()
+            .init_resource::<ShowNebulae>()
             .add_systems(Update, sync_menu_text);
         let text = app
             .world_mut()

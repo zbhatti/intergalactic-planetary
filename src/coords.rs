@@ -29,6 +29,11 @@ pub struct WorldPos(pub DVec3);
 #[derive(Component, Clone, Copy, Debug)]
 pub struct BodyRadius(pub f64);
 
+/// On an object with a `BodyRadius` that you can fly through (a nebula): it doesn't count as the
+/// nearest surface for adaptive speed, doesn't hide labels behind it, and is picked at its center.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct NotASurface;
+
 /// World position that render-space (f32 `Transform`) coordinates are relative to.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
 pub struct FloatingOrigin(pub DVec3);
@@ -102,7 +107,7 @@ pub enum NavSet {
 
 pub fn update_nearest(
     cam: Query<&WorldPos, With<FlyCam>>,
-    bodies: Query<(Entity, &WorldPos, &BodyRadius)>,
+    bodies: Query<(Entity, &WorldPos, &BodyRadius), Without<NotASurface>>,
     mut nearest: ResMut<Nearest>,
 ) {
     let Ok(cam) = cam.single() else { return };

@@ -16,7 +16,7 @@
 
 use crate::camera::FlyCam;
 use crate::constants::AU_PER_PC;
-use crate::coords::{BodyRadius, NavSet, WorldPos};
+use crate::coords::{BodyRadius, NavSet, NotASurface, WorldPos};
 use crate::info::{BodyInfo, BodyKind, disk_radius_px};
 use crate::menu::MenuOpen;
 use crate::search::Search;
@@ -49,6 +49,7 @@ pub struct LabelSettings {
     pub moons: bool,
     /// Asteroids and comets.
     pub small_bodies: bool,
+    pub nebulae: bool,
     pub stars: bool,
     /// Stars are labelled when brighter (smaller) than this apparent magnitude from the camera.
     pub star_mag_limit: f32,
@@ -61,6 +62,7 @@ impl Default for LabelSettings {
             planets: true,
             moons: true,
             small_bodies: true,
+            nebulae: true,
             stars: true,
             star_mag_limit: 2.5,
         }
@@ -86,6 +88,7 @@ impl LabelSettings {
                 BodyKind::Planet | BodyKind::DwarfPlanet => self.planets,
                 BodyKind::Moon => self.moons,
                 BodyKind::Asteroid | BodyKind::Comet => self.small_bodies,
+                BodyKind::Nebula => self.nebulae,
                 // Shown with the figures (SkySettings); see update_labels.
                 BodyKind::Constellation => true,
             }
@@ -215,6 +218,8 @@ fn tier_and_key(kind: BodyKind, selected: bool, mag: Option<f32>, dist: f64) -> 
         BodyKind::Planet | BodyKind::DwarfPlanet => (1, dist as f32),
         BodyKind::Star => (2, mag.unwrap_or(0.0)),
         BodyKind::Moon | BodyKind::Asteroid | BodyKind::Comet => (3, dist as f32),
+        // After the stars, nearer first.
+        BodyKind::Nebula => (3, dist as f32),
         BodyKind::Constellation => (4, 0.0),
     }
 }
@@ -226,6 +231,7 @@ type ObjectQuery<'a> = (
     Option<&'a BodyRadius>,
     Option<&'a LabelLum>,
     Option<&'a OrbitOf>,
+    Has<NotASurface>,
 );
 
 #[allow(clippy::too_many_arguments)]
@@ -255,7 +261,11 @@ pub fn update_labels(
     if settings.enabled {
         let occluders: Vec<Occluder> = objects
             .iter()
-            .filter_map(|(e, pos, _, radius, ..)| {
+            .filter_map(|(e, pos, _, radius, _, _, fly_through)| {
+                // Nebulae glow; they don't hide what's behind them.
+                if fly_through {
+                    return None;
+                }
                 let dist = pos.0.distance(cam_pos.0);
                 let radius_px = disk_radius_px(radius?.0, dist, fov.0, vp.y);
                 (radius_px >= MIN_OCCLUDER_PX).then_some(())?;
@@ -269,7 +279,7 @@ pub fn update_labels(
             .collect();
 
         for (label, label_for, _) in &labels {
-            let Ok((e, pos, info, _, lum, orbit)) = objects.get(label_for.target) else {
+            let Ok((e, pos, info, _, lum, orbit, _)) = objects.get(label_for.target) else {
                 continue;
             };
             let selected = search.target == Some(e);

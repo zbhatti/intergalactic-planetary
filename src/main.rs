@@ -16,11 +16,13 @@ mod labels;
 mod locations;
 mod menu;
 mod navigation;
+mod nebulae;
 mod orbit;
 mod perf;
 mod search;
 mod sky;
 mod solar_system;
+mod spectrum;
 mod speed;
 mod star_browser;
 mod starfield;
@@ -64,6 +66,7 @@ fn main() {
             star_browser::StarBrowserPlugin,
             locations::LocationsPlugin,
             exoplanets::ExoplanetsPlugin,
+            nebulae::NebulaePlugin,
         ))
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(camera::CursorLocked(true))
