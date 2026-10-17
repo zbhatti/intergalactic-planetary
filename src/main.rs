@@ -6,6 +6,7 @@ mod browser;
 mod camera;
 mod constants;
 mod coords;
+mod exoplanets;
 mod goto;
 mod gpu_compat;
 mod hyg;
@@ -30,6 +31,9 @@ mod ui;
 mod zoom;
 
 fn main() {
+    // Exoplanet hosts HYG doesn't list are appended to the star catalog before anything reads it.
+    let mut hyg = hyg::HygCatalog::embedded();
+    let exo = exoplanets::load(&mut hyg);
     App::new()
         .add_plugins(
             DefaultPlugins
@@ -59,6 +63,7 @@ fn main() {
             auto_exposure::AutoExposurePlugin,
             star_browser::StarBrowserPlugin,
             locations::LocationsPlugin,
+            exoplanets::ExoplanetsPlugin,
         ))
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(camera::CursorLocked(true))
@@ -75,7 +80,8 @@ fn main() {
         .insert_resource(stars::ExposureSettings::default())
         .insert_resource(menu::MenuOpen::default())
         .insert_resource(menu::ShowCatalogStars::default())
-        .insert_resource(hyg::HygCatalog::embedded())
+        .insert_resource(hyg)
+        .insert_resource(exo)
         .add_systems(
             Startup,
             (

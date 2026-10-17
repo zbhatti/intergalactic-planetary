@@ -33,6 +33,9 @@ pub struct HygStar {
     pub class: char,
     /// False for naked-eye stars without a measured distance, placed at [`FALLBACK_DIST_PC`].
     pub dist_known: bool,
+    /// Measured radius (solar radii), when another catalog provides one (exoplanet hosts);
+    /// otherwise radii are estimated from luminosity and class.
+    pub radius_sun: Option<f32>,
 }
 
 #[derive(Resource, Debug, Default)]
@@ -84,6 +87,7 @@ impl HygCatalog {
                 hyg_id: u32_at(b, at + 20)?,
                 class: if class == 0 { ' ' } else { class as char },
                 dist_known: flags & FLAG_DIST_UNKNOWN == 0,
+                radius_sun: None,
             });
         }
         let mut at = HEADER_BYTES + count * RECORD_BYTES;
