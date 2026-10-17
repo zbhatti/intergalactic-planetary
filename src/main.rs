@@ -11,6 +11,7 @@ mod hyg;
 mod hyg_bodies;
 mod info;
 mod labels;
+mod locations;
 mod menu;
 mod navigation;
 mod orbit;
@@ -19,6 +20,7 @@ mod search;
 mod sky;
 mod solar_system;
 mod speed;
+mod star_browser;
 mod starfield;
 mod stars;
 #[cfg(test)]
@@ -53,6 +55,8 @@ fn main() {
             zoom::ZoomPlugin,
             labels::LabelsPlugin,
             sky::SkyPlugin,
+            star_browser::StarBrowserPlugin,
+            locations::LocationsPlugin,
         ))
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(camera::CursorLocked(true))

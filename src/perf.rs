@@ -163,6 +163,9 @@ pub fn update_perf_overlay(
 pub fn bench_key(name: &str) -> Option<KeyCode> {
     Some(match name {
         "B" => KeyCode::KeyB,
+        "N" => KeyCode::KeyN,
+        "K" => KeyCode::KeyK,
+        "C" => KeyCode::KeyC,
         "I" => KeyCode::KeyI,
         "F3" => KeyCode::F3,
         "Esc" => KeyCode::Escape,

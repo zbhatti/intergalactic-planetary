@@ -16,7 +16,8 @@ supercluster).
 - **109k catalog stars** drawn as one instanced point cloud. Any visible star can be clicked, and
   the 540 named ones can be searched for. Close up (< 2000 AU), the nearest star becomes a sphere.
 - **Info panel** (type, radius, mass, temperature, luminosity, distance), **solar system browser**,
-  **search**.
+  **star browser** (nearest or brightest from wherever you are), **search**, and **saved locations**
+  that persist between runs.
 - **Zoom**: mouse wheel, from 120 deg down to 0.01 deg. Stars keep their size in pixels, like a
   telescope.
 - **Sky overlays**: the 88 IAU constellation figures (C), which distort as you fly away from home
@@ -36,6 +37,8 @@ supercluster).
 | G | Go to the selection |
 | I | Show/hide the info panel |
 | B | Solar system browser |
+| N | Nearest stars (Tab: brightest from here) |
+| K | Saved locations (save the view, jump back, Delete removes) |
 | L | Labels on/off (per-type filters in the Esc menu) |
 | C | Constellation figures and names |
 | Enter | Search (arrows to pick, Enter to select, Esc to close) |

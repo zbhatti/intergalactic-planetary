@@ -1,22 +1,25 @@
-//! Solar system browser (B): the Sun -> planets/dwarf planets -> moons tree, ordered by
-//! orbit size. Up/Down move, Enter selects and turns to face it, B or Esc closes.
+//! The list panel: solar system browser (B), star browser (N, `star_browser.rs`) and saved
+//! locations (K, `locations.rs`). Up/Down move, Enter acts on the row, the panel's key or Esc
+//! closes.
+//!
+//! The solar system tree is the Sun -> planets/dwarf planets -> moons, ordered by orbit size.
 
 use crate::info::BodyInfo;
 use crate::search::Search;
 use crate::solar_system::OrbitOf;
 use bevy::prelude::*;
 
-/// One browser row: entity, tree depth, display name.
-pub type Row = (Entity, usize, String);
+/// One solar system tree node: entity, tree depth, display name.
+pub type TreeNode = (Entity, usize, String);
 
 /// Depth-first tree from (entity, name, orbit) triples: roots (no orbit) first, children of
 /// each node ordered by semi-major axis.
-pub fn build_tree(bodies: &[(Entity, String, Option<OrbitOf>)]) -> Vec<Row> {
+pub fn build_tree(bodies: &[(Entity, String, Option<OrbitOf>)]) -> Vec<TreeNode> {
     fn visit(
         node: Entity,
         depth: usize,
         bodies: &[(Entity, String, Option<OrbitOf>)],
-        out: &mut Vec<Row>,
+        out: &mut Vec<TreeNode>,
     ) {
         let Some((_, name, _)) = bodies.iter().find(|(e, _, _)| *e == node) else {
             return;
@@ -45,12 +48,98 @@ pub fn build_tree(bodies: &[(Entity, String, Option<OrbitOf>)]) -> Vec<Row> {
     out
 }
 
+/// Which list the panel shows. Each has its own hotkey (B, N, K); pressing it again or Esc
+/// closes the panel, and another panel's key switches to it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PanelKind {
+    SolarSystem,
+    Stars(StarSort),
+    Locations,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StarSort {
+    Nearest,
+    Brightest,
+}
+
+impl PanelKind {
+    fn key(self) -> KeyCode {
+        match self {
+            PanelKind::SolarSystem => KeyCode::KeyB,
+            PanelKind::Stars(_) => KeyCode::KeyN,
+            PanelKind::Locations => KeyCode::KeyK,
+        }
+    }
+
+    pub fn title(self) -> &'static str {
+        match self {
+            PanelKind::SolarSystem => "Solar system  [Up/Down, Enter, B]",
+            PanelKind::Stars(StarSort::Nearest) => "Nearest stars  [Tab: brightest, Enter, N]",
+            PanelKind::Stars(StarSort::Brightest) => {
+                "Brightest stars from here  [Tab: nearest, Enter, N]"
+            }
+            PanelKind::Locations => "Locations  [Enter: go/save, Del: delete, K]",
+        }
+    }
+}
+
+/// What Enter (or Delete) on a row does; handled by the module that built the rows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RowAction {
+    /// Select an entity and turn to face it.
+    Select(Entity),
+    /// Select HYG catalog star `i` (promoted to an entity if needed) and turn to face it.
+    SelectStar(usize),
+    /// Save the current view as a location.
+    SaveLocation,
+    /// Jump to saved location `i`.
+    GoToLocation(usize),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Row {
+    pub action: RowAction,
+    pub depth: usize,
+    pub text: String,
+}
+
+/// The list panel, and the keyboard focus: while it's open, search and the pause menu ignore
+/// Enter/Esc (see `is_open`).
 #[derive(Resource, Default)]
 pub struct Browser {
-    pub open: bool,
+    pub open: Option<PanelKind>,
     pub idx: usize,
     pub rows: Vec<Row>,
+    /// Set when `open` changes or the content must be recomputed; the panel's row builder
+    /// fills `rows` and clears it.
+    pub dirty: bool,
 }
+
+impl Browser {
+    pub fn is_open(&self) -> bool {
+        self.open.is_some()
+    }
+
+    pub fn is(&self, kind: PanelKind) -> bool {
+        self.open == Some(kind)
+    }
+
+    /// Replaces the rows, keeping the cursor in range.
+    pub fn set_rows(&mut self, rows: Vec<Row>) {
+        self.rows = rows;
+        self.idx = self.idx.min(self.rows.len().saturating_sub(1));
+        self.dirty = false;
+    }
+}
+
+/// Enter on a row.
+#[derive(Event, Clone, Copy, Debug)]
+pub struct BrowserActivate(pub RowAction);
+
+/// Delete on a row.
+#[derive(Event, Clone, Copy, Debug)]
+pub struct BrowserDelete(pub RowAction);
 
 #[derive(Component)]
 pub struct BrowserPanel;
@@ -82,45 +171,109 @@ pub fn setup_browser_ui(mut commands: Commands) {
     ));
 }
 
+const PANEL_KEYS: [PanelKind; 3] = [
+    PanelKind::SolarSystem,
+    PanelKind::Stars(StarSort::Nearest),
+    PanelKind::Locations,
+];
+
 pub fn browser_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut browser: ResMut<Browser>,
-    mut search: ResMut<Search>,
+    search: Res<Search>,
     menu_open: Res<crate::menu::MenuOpen>,
-    bodies: Query<(Entity, &BodyInfo, Option<&OrbitOf>)>,
+    mut activate: EventWriter<BrowserActivate>,
+    mut delete: EventWriter<BrowserDelete>,
 ) {
     if search.active || menu_open.0 {
         return;
     }
-    if !browser.open {
-        if keys.just_pressed(KeyCode::KeyB) {
-            let list: Vec<_> = bodies
-                .iter()
-                .map(|(e, info, o)| (e, info.name.clone(), o.copied()))
-                .collect();
-            browser.rows = build_tree(&list);
-            // Start on the current selection if it's in the tree.
-            browser.idx = search
-                .target
-                .and_then(|t| browser.rows.iter().position(|r| r.0 == t))
-                .unwrap_or(0);
-            browser.open = true;
-        }
+    if let Some(kind) = PANEL_KEYS.into_iter().find(|k| keys.just_pressed(k.key())) {
+        let same = browser.open.is_some_and(|o| o.key() == kind.key());
+        browser.open = if same { None } else { Some(kind) };
+        browser.idx = 0;
+        browser.rows.clear();
+        browser.dirty = browser.open.is_some();
         return;
     }
-    if keys.just_pressed(KeyCode::KeyB) || keys.just_pressed(KeyCode::Escape) {
-        browser.open = false;
+    let Some(open) = browser.open else {
+        return;
+    };
+    let current = browser.rows.get(browser.idx).map(|r| r.action);
+    if keys.just_pressed(KeyCode::Escape) {
+        browser.open = None;
     } else if keys.just_pressed(KeyCode::ArrowUp) {
         browser.idx = browser.idx.saturating_sub(1);
     } else if keys.just_pressed(KeyCode::ArrowDown) {
         browser.idx = (browser.idx + 1).min(browser.rows.len().saturating_sub(1));
-    } else if keys.just_pressed(KeyCode::Enter)
-        && let Some((e, _, name)) = browser.rows.get(browser.idx).cloned()
+    } else if keys.just_pressed(KeyCode::Tab)
+        && let PanelKind::Stars(sort) = open
     {
-        search.target = Some(e);
-        search.target_name = Some(name);
-        search.should_orient = true;
-        browser.open = false;
+        browser.open = Some(PanelKind::Stars(match sort {
+            StarSort::Nearest => StarSort::Brightest,
+            StarSort::Brightest => StarSort::Nearest,
+        }));
+        browser.idx = 0;
+        browser.dirty = true;
+    } else if keys.just_pressed(KeyCode::Enter)
+        && let Some(action) = current
+    {
+        activate.write(BrowserActivate(action));
+        // Saving keeps the list open to show the new entry; everything else closes it.
+        if action == RowAction::SaveLocation {
+            browser.dirty = true;
+        } else {
+            browser.open = None;
+        }
+    } else if keys.just_pressed(KeyCode::Delete)
+        && let Some(action) = current
+    {
+        delete.write(BrowserDelete(action));
+        browser.dirty = true;
+    }
+}
+
+/// Fills the solar system tree when that panel opens.
+pub fn build_solar_system_rows(
+    mut browser: ResMut<Browser>,
+    search: Res<Search>,
+    bodies: Query<(Entity, &BodyInfo, Option<&OrbitOf>)>,
+) {
+    if !browser.dirty || !browser.is(PanelKind::SolarSystem) {
+        return;
+    }
+    let list: Vec<_> = bodies
+        .iter()
+        .map(|(e, info, o)| (e, info.name.clone(), o.copied()))
+        .collect();
+    let rows: Vec<Row> = build_tree(&list)
+        .into_iter()
+        .map(|(e, depth, name)| Row {
+            action: RowAction::Select(e),
+            depth,
+            text: name,
+        })
+        .collect();
+    // Start on the current selection if it's in the tree.
+    browser.idx = search
+        .target
+        .and_then(|t| rows.iter().position(|r| r.action == RowAction::Select(t)))
+        .unwrap_or(0);
+    browser.set_rows(rows);
+}
+
+/// Selects an entity row.
+pub fn select_entity_row(
+    mut events: EventReader<BrowserActivate>,
+    mut search: ResMut<Search>,
+    infos: Query<&BodyInfo>,
+) {
+    for ev in events.read() {
+        if let RowAction::Select(e) = ev.0 {
+            search.target = Some(e);
+            search.target_name = infos.get(e).ok().map(|i| i.name.clone());
+            search.should_orient = true;
+        }
     }
 }
 
@@ -140,26 +293,42 @@ pub fn update_browser_ui(
     let Ok((mut text, mut vis)) = panel.single_mut() else {
         return;
     };
-    if !browser.open {
+    let Some(kind) = browser.open else {
         vis.set_if_neq(Visibility::Hidden);
         return;
-    }
+    };
     let (start, end) = visible_window(browser.rows.len(), browser.idx, VISIBLE_ROWS);
-    let mut lines = vec!["Solar system  [Up/Down, Enter, B]".to_string()];
-    for (i, (_, depth, name)) in browser.rows[start..end].iter().enumerate() {
+    let mut lines = vec![kind.title().to_string()];
+    for (i, row) in browser.rows[start..end].iter().enumerate() {
         let cursor = if start + i == browser.idx { ">" } else { " " };
-        lines.push(format!("{cursor} {}{name}", "  ".repeat(*depth)));
+        lines.push(format!("{cursor} {}{}", "  ".repeat(row.depth), row.text));
     }
-    text.0 = lines.join("\n");
+    if browser.rows.is_empty() {
+        lines.push("  (empty)".to_string());
+    }
+    let wanted = lines.join("\n");
+    if text.0 != wanted {
+        text.0 = wanted;
+    }
     vis.set_if_neq(Visibility::Visible);
 }
+
+/// Systems that fill rows for a panel: run between input and the UI update.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BuildRows;
 
 pub struct BrowserPlugin;
 
 impl Plugin for BrowserPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Browser>()
+            .add_event::<BrowserActivate>()
+            .add_event::<BrowserDelete>()
             .add_systems(Startup, setup_browser_ui)
+            .configure_sets(
+                Update,
+                BuildRows.after(browser_input).before(update_browser_ui),
+            )
             .add_systems(
                 Update,
                 (
@@ -168,9 +337,9 @@ impl Plugin for BrowserPlugin {
                     browser_input
                         .after(crate::menu::toggle_menu)
                         .after(crate::search::handle_search),
+                    (build_solar_system_rows, select_entity_row).in_set(BuildRows),
                     update_browser_ui,
-                )
-                    .chain(),
+                ),
             );
     }
 }
@@ -179,6 +348,21 @@ impl Plugin for BrowserPlugin {
 mod tests {
     use super::*;
     use crate::testing::{headless_app, press_key, release_key, run_frames};
+
+    /// The browser's systems without its UI (no `Text` rendering headless).
+    struct BrowserPluginHeadless;
+
+    impl Plugin for BrowserPluginHeadless {
+        fn build(&self, app: &mut App) {
+            app.init_resource::<Browser>()
+                .add_event::<BrowserActivate>()
+                .add_event::<BrowserDelete>()
+                .add_systems(
+                    Update,
+                    (browser_input, (build_solar_system_rows, select_entity_row)).chain(),
+                );
+        }
+    }
 
     fn e(i: u32) -> Entity {
         Entity::from_raw(i)
@@ -237,8 +421,7 @@ mod tests {
         let mut app = headless_app();
         app.init_resource::<Search>()
             .init_resource::<crate::menu::MenuOpen>()
-            .init_resource::<Browser>()
-            .add_systems(Update, browser_input);
+            .add_plugins(BrowserPluginHeadless);
         let info = |n: &str| BodyInfo {
             name: n.into(),
             kind: crate::info::BodyKind::Planet,
@@ -264,7 +447,7 @@ mod tests {
             .id();
 
         tap(&mut app, KeyCode::KeyB);
-        assert!(app.world().resource::<Browser>().open);
+        assert!(app.world().resource::<Browser>().is(PanelKind::SolarSystem));
         tap(&mut app, KeyCode::ArrowDown); // Mercury
         tap(&mut app, KeyCode::ArrowDown); // Venus
         tap(&mut app, KeyCode::Enter);
@@ -272,7 +455,29 @@ mod tests {
         let search = app.world().resource::<Search>();
         assert_eq!(search.target, Some(venus));
         assert!(search.should_orient);
-        assert!(!app.world().resource::<Browser>().open);
+        assert!(!app.world().resource::<Browser>().is_open());
+    }
+
+    #[test]
+    fn test_panel_keys_switch_and_close() {
+        let mut app = headless_app();
+        app.init_resource::<Search>()
+            .init_resource::<crate::menu::MenuOpen>()
+            .add_plugins(BrowserPluginHeadless);
+        tap(&mut app, KeyCode::KeyB);
+        assert!(app.world().resource::<Browser>().is(PanelKind::SolarSystem));
+        tap(&mut app, KeyCode::KeyK);
+        assert!(app.world().resource::<Browser>().is(PanelKind::Locations));
+        tap(&mut app, KeyCode::KeyN);
+        tap(&mut app, KeyCode::Tab);
+        assert!(
+            app.world()
+                .resource::<Browser>()
+                .is(PanelKind::Stars(StarSort::Brightest))
+        );
+        // N closes the star panel whichever sort it shows.
+        tap(&mut app, KeyCode::KeyN);
+        assert!(!app.world().resource::<Browser>().is_open());
     }
 
     #[test]
@@ -281,18 +486,12 @@ mod tests {
         app.init_resource::<Search>()
             .init_resource::<crate::menu::MenuOpen>()
             .insert_resource(crate::camera::CursorLocked(true))
-            .init_resource::<Browser>()
-            .add_systems(
-                Update,
-                (
-                    crate::menu::toggle_menu,
-                    browser_input.after(crate::menu::toggle_menu),
-                ),
-            );
+            .add_plugins(BrowserPluginHeadless)
+            .add_systems(Update, crate::menu::toggle_menu.before(browser_input));
         tap(&mut app, KeyCode::KeyB);
-        assert!(app.world().resource::<Browser>().open);
+        assert!(app.world().resource::<Browser>().is_open());
         tap(&mut app, KeyCode::Escape);
-        assert!(!app.world().resource::<Browser>().open);
+        assert!(!app.world().resource::<Browser>().is_open());
         assert!(!app.world().resource::<crate::menu::MenuOpen>().0);
         // A second Esc, with the browser closed, opens the menu as usual.
         tap(&mut app, KeyCode::Escape);

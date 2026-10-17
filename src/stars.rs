@@ -2,6 +2,7 @@ use crate::camera::FlyCam;
 use crate::constants::{AU_PER_PC, KM_PER_AU};
 use crate::coords::{BodyRadius, WorldPos};
 use crate::hyg::HygCatalog;
+use crate::hyg_bodies::HygEntities;
 use crate::info::{BodyInfo, BodyKind, star_facts};
 use crate::labels::{LabelLum, spawn_label};
 use crate::orbit::{equatorial_to_world, radec_to_equatorial};
@@ -177,6 +178,7 @@ pub fn setup_stars(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut catalog: ResMut<ObjectCatalog>,
     hyg: Res<HygCatalog>,
+    mut hyg_entities: Option<ResMut<HygEntities>>,
 ) {
     let matches = match_curated(&hyg);
     for (k, &(name, ra, dec, dist, spect, radius_solar, luminosity)) in
@@ -211,6 +213,10 @@ pub fn setup_stars(
             .id();
 
         commands.entity(star_entity).insert(LabelLum(visual_lum));
+        // The curated sphere is this catalog star's entity (star browser, picking).
+        if let (Some(i), Some(map)) = (matches[k], hyg_entities.as_mut()) {
+            map.0.insert(i, star_entity);
+        }
         spawn_label(&mut commands, star_entity, name);
 
         catalog.0.push((name.to_string(), star_entity));
