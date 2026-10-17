@@ -1,46 +1,55 @@
 # IP (Intergalactic Planetary)
 
-A 3D universe explorer built with Rust and Bevy, inspired by SpaceEngine. Navigate through a physically accurate solar system and a catalog of 57 named stars at real astronomical coordinates.
+A 3D universe explorer built with Rust and Bevy, inspired by SpaceEngine. Fly from the surface of the
+Moon out past the nearest stars at real scale: real positions for the Sun, planets, dwarf planets and
+major moons, and ~109,000 real stars from the HYG catalog. Functionality comes first, so it runs at
+60 fps on an Intel HD 520. See [ROADMAP.md](ROADMAP.md) for what's next (the goal is the Laniakea
+supercluster).
 
 ## Features
 
-- **Free-fly camera** — WASD to move, mouse to look, Esc to release cursor
-- **Speed cycling** — press Shift to cycle through 8 speed multipliers (x0.1 → x1,000,000 base speed of light)
-- **Object search** — press Enter to open search, type a name, use arrow keys to pick, Enter to select
-- **Direction ring** — white ring drawn in front of the camera pointing at the selected object
-- **Off-screen arrow** — gizmo arrow at the screen edge when the target is out of view
-- **Distance HUD** — live distance to target in appropriate units (m / km / AU / ly)
-- **Speed HUD** — current speed in km/s, fraction of c, or multiples of c
-
-## Astronomical accuracy
-
-- Star positions from real RA/Dec/distance catalog data (57 named stars)
-- Heliocentric planet positions approximated for June 25, 2026
-- Physical sizes: stars in solar radii, planets in km converted to AU
-- Coordinate system: 1 AU = 1 game unit, 1 parsec = 1000 game units
-- Base speed = speed of light (≈0.002004 AU/s)
+- **Real scale**: f64 world coordinates with a floating origin, so there's no jitter from metres
+  up to megaparsecs. Speed adapts to the distance from the nearest surface.
+- **Go-to flight**: select anything, press G, and you fly there in seconds whatever the distance.
+- **Solar system** placed for 2026-06-25 from NASA/JPL orbital elements: 8 planets, 5 dwarf
+  planets, 21 major moons.
+- **109k catalog stars** drawn as one instanced point cloud. Any visible star can be clicked, and
+  the 540 named ones can be searched for. Close up (< 2000 AU), the nearest star becomes a sphere.
+- **Info panel** (type, radius, mass, temperature, luminosity, distance), **solar system browser**,
+  **search**.
+- **Zoom**: mouse wheel, from 120 deg down to 0.01 deg. Stars keep their size in pixels, like a
+  telescope.
+- **Labels**, filtered by type and by star brightness from where you are, and decluttered.
+  Labels never overlap each other or the HUD, and they hide behind planets.
 
 ## Controls
 
 | Input | Action |
 |---|---|
-| W / A / S / D | Move forward / left / back / right |
-| Mouse | Look around |
-| Shift | Cycle speed multiplier |
-| Enter | Open search |
-| Arrow Up / Down | Navigate search results |
-| Enter (in search) | Select object and orient camera |
-| Esc (in search) | Close search |
-| Esc (in flight) | Toggle cursor lock |
+| W / A / S / D | Fly forward / left / back / right |
+| Mouse | Look around (slower when zoomed in) |
+| Mouse wheel / middle click | Zoom / reset zoom |
+| Shift | Cycle throttle (x0.1 to x30 of the adaptive speed) |
+| Left click | Select the object under the crosshair |
+| G | Go to the selection |
+| I | Show/hide the info panel |
+| B | Solar system browser |
+| L | Labels on/off (per-type filters in the Esc menu) |
+| Enter | Search (arrows to pick, Enter to select, Esc to close) |
+| `[` / `]` | Exposure down / up |
+| Esc | Pause menu (labels, star catalog, quit) |
+| F3 / F12 | Performance overlay / screenshot |
 
 ## Running
 
 ```bash
-cargo run
+cargo run                                       # dev build (dynamic linking)
+cargo build --release --no-default-features     # standalone release binary
 ```
 
 Requires Rust 1.88+ and a Metal-capable GPU (macOS) or Vulkan/DX12 (other platforms). OpenGL works
-as a fallback (`WGPU_BACKEND=gl cargo run`).
+as a fallback (`WGPU_BACKEND=gl cargo run`). CI builds Linux, macOS and Windows binaries on every
+PR (artifacts `IP-Linux`, `IP-macOS`, `IP-Windows`).
 
 ### Troubleshooting older GPUs
 
@@ -54,28 +63,11 @@ as a fallback (`WGPU_BACKEND=gl cargo run`).
 - Pick the GPU with `WGPU_POWER_PREF=low` (integrated) or `high` (discrete), and the backend with
   `WGPU_BACKEND=vulkan|gl|dx12|metal`. The `AdapterInfo` log line shows which one was used.
 
-## Project structure
+## Development
 
-```
-src/
-├── main.rs          # App wiring
-├── constants.rs     # Physical constants (c, AU, ly)
-├── camera.rs        # FlyCam component and movement systems
-├── search.rs        # Search UI and object catalog
-├── speed.rs         # Speed multiplier state
-├── solar_system.rs  # Planet and Sun spawning
-├── stars.rs         # 57-star catalog and coordinate math
-├── ui.rs            # Distance/speed HUD labels
-└── navigation.rs    # Direction ring, off-screen arrow, camera orient
-```
-
-## Tests
-
-```bash
-cargo test
-```
-
-42 unit tests cover coordinate conversion (`star_world_pos`), distance/speed formatting, catalog string matching, and camera yaw/pitch derivation.
+`cargo test` runs the unit tests and the headless app tests (real Bevy schedules, no GPU).
+`CLAUDE.md` has the architecture notes and conventions, and `PERF.md` has the benchmark procedure
+and results.
 
 ## Data
 

@@ -8,9 +8,9 @@ use crate::coords::{NavSet, Nearest, WorldPos};
 use crate::hyg::{HygCatalog, HygStar};
 use crate::menu::ShowCatalogStars;
 use crate::stars::{
-    BRIGHTNESS_SCALE, CuratedHygMatches, ExposureSettings, MAX_STAR_BRIGHTNESS, MIN_STAR_ANGLE,
-    spectral_color,
+    BRIGHTNESS_SCALE, CuratedHygMatches, ExposureSettings, MAX_STAR_BRIGHTNESS, spectral_color,
 };
+use crate::zoom::{CameraFov, min_star_angle};
 use bevy::asset::{load_internal_asset, weak_handle};
 use bevy::math::{DVec3, IVec3};
 use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
@@ -47,7 +47,7 @@ mod params {
     #![allow(dead_code)]
     use bevy::render::render_resource::ShaderType;
 
-    #[derive(Clone, Copy, Debug, ShaderType)]
+    #[derive(Clone, Copy, Debug, PartialEq, ShaderType)]
     pub struct StarfieldParams {
         pub exposure: f32,
         pub brightness_scale: f32,
@@ -69,7 +69,7 @@ impl StarfieldParams {
             exposure,
             brightness_scale: BRIGHTNESS_SCALE,
             max_brightness: MAX_STAR_BRIGHTNESS,
-            min_angle: MIN_STAR_ANGLE,
+            min_angle: crate::stars::MIN_STAR_ANGLE,
             au_per_pc: AU_PER_PC as f32,
             min_dist_pc: crate::stars::MIN_BRIGHTNESS_DIST_PC,
             fade_near_au: FADE_NEAR_AU,
@@ -119,6 +119,15 @@ impl Material for StarfieldMaterial {
 
 #[derive(Component)]
 pub struct StarfieldChunk;
+
+/// The one material all chunks share.
+#[derive(Resource)]
+pub struct StarfieldMaterialHandle(pub Handle<StarfieldMaterial>);
+
+/// Render-space center (xyz) and radius (w) of the sphere whose points are hidden; written by
+/// `hyg_bodies::update_star_proxy`, w = 0 when nothing is hidden.
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq)]
+pub struct StarfieldHide(pub Vec4);
 
 /// World positions of the rendered catalog stars (curated stars excluded), for the
 /// nearest-object distance that drives adaptive speed.
@@ -194,6 +203,7 @@ pub fn setup_starfield(
         params: StarfieldParams::new(exposure.factor()),
     });
     let chunks = chunk_stars(&catalog.stars, &skip, chunk_au);
+    commands.insert_resource(StarfieldMaterialHandle(material.clone()));
     for (key, members) in &chunks {
         let center = (key.as_dvec3() + DVec3::splat(0.5)) * chunk_au;
         commands.spawn((
@@ -219,15 +229,29 @@ pub fn setup_starfield(
     );
 }
 
-pub fn update_starfield_exposure(
+/// Keeps the shared uniform in step with exposure, zoom and the hidden proxy star. Writes (and
+/// so re-uploads) the material only when a value actually changed.
+pub fn sync_starfield_params(
+    handle: Option<Res<StarfieldMaterialHandle>>,
     exposure: Res<ExposureSettings>,
+    fov: Res<CameraFov>,
+    hide: Res<StarfieldHide>,
     mut materials: ResMut<Assets<StarfieldMaterial>>,
 ) {
-    if !exposure.is_changed() {
+    let Some(handle) = handle else { return };
+    let Some(current) = materials.get(&handle.0).map(|m| m.params) else {
         return;
-    }
-    for (_, mat) in materials.iter_mut() {
-        mat.params.exposure = exposure.factor();
+    };
+    let wanted = StarfieldParams {
+        exposure: exposure.factor(),
+        min_angle: min_star_angle(fov.0),
+        hide: hide.0,
+        ..current
+    };
+    if wanted != current
+        && let Some(mat) = materials.get_mut(&handle.0)
+    {
+        mat.params = wanted;
     }
 }
 
@@ -283,6 +307,7 @@ impl Plugin for StarfieldPlugin {
             ..default()
         })
         .init_resource::<StarPoints>()
+        .init_resource::<StarfieldHide>()
         .add_systems(Startup, setup_starfield.after(crate::stars::setup_stars))
         .add_systems(
             Update,
@@ -291,7 +316,7 @@ impl Plugin for StarfieldPlugin {
                     .in_set(NavSet::Rebase)
                     .after(crate::coords::update_nearest)
                     .before(crate::coords::rebase_origin),
-                (update_starfield_exposure, update_starfield_visibility).in_set(NavSet::View),
+                (sync_starfield_params, update_starfield_visibility).in_set(NavSet::View),
             ),
         );
     }
@@ -349,6 +374,37 @@ mod tests {
         assert!(chunks.len() < 1500, "{} chunks", chunks.len());
         let total: usize = chunks.values().map(Vec::len).sum();
         assert_eq!(total, cat.stars.len());
+    }
+
+    #[test]
+    fn test_starfield_uniform_follows_exposure_zoom_and_hide() {
+        let mut app = crate::testing::headless_app();
+        app.add_plugins(AssetPlugin::default())
+            .init_asset::<StarfieldMaterial>()
+            .init_resource::<ExposureSettings>()
+            .init_resource::<CameraFov>()
+            .init_resource::<StarfieldHide>()
+            .add_systems(Update, sync_starfield_params);
+        let handle = app
+            .world_mut()
+            .resource_mut::<Assets<StarfieldMaterial>>()
+            .add(StarfieldMaterial {
+                params: StarfieldParams::new(1.0),
+            });
+        app.insert_resource(StarfieldMaterialHandle(handle.clone()));
+        app.world_mut().resource_mut::<ExposureSettings>().ev = 3;
+        *app.world_mut().resource_mut::<CameraFov>() = CameraFov(0.01);
+        app.world_mut().resource_mut::<StarfieldHide>().0 = Vec4::new(1.0, 2.0, 3.0, 50.0);
+        app.update();
+        let params = app
+            .world()
+            .resource::<Assets<StarfieldMaterial>>()
+            .get(&handle)
+            .unwrap()
+            .params;
+        assert_eq!(params.exposure, 8.0);
+        assert_eq!(params.min_angle, min_star_angle(0.01));
+        assert_eq!(params.hide.w, 50.0);
     }
 
     #[test]

@@ -1,4 +1,5 @@
 use crate::camera::CursorLocked;
+use crate::labels::LabelSettings;
 use crate::search::Search;
 use bevy::{app::AppExit, prelude::*, window::CursorGrabMode};
 
@@ -20,54 +21,98 @@ impl Default for ShowCatalogStars {
     }
 }
 
-/// Whether catalog star name labels are shown. Off by default.
-#[derive(Resource, Default)]
-pub struct ShowStarLabels(pub bool);
-
 #[derive(Component)]
 pub struct PauseMenu;
 
-#[derive(Component)]
-pub struct QuitButton;
+/// A pause-menu button. Its text is regenerated from the settings whenever they change, so it
+/// stays right however the setting was changed (menu click, hotkey, bench setup).
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MenuItem {
+    CatalogStars,
+    Labels,
+    PlanetLabels,
+    MoonLabels,
+    StarLabels,
+    StarMagLimit,
+    Quit,
+}
 
-#[derive(Component)]
-pub struct CatalogStarsButton;
+impl MenuItem {
+    pub const TOGGLES: [MenuItem; 6] = [
+        MenuItem::CatalogStars,
+        MenuItem::Labels,
+        MenuItem::PlanetLabels,
+        MenuItem::MoonLabels,
+        MenuItem::StarLabels,
+        MenuItem::StarMagLimit,
+    ];
 
-#[derive(Component)]
-pub struct CatalogStarsLabel;
+    pub fn text(self, stars: &ShowCatalogStars, labels: &LabelSettings) -> String {
+        match self {
+            MenuItem::CatalogStars => checkbox_text(CATALOG_STARS_LABEL, stars.0),
+            MenuItem::Labels => checkbox_text("Labels (L)", labels.enabled),
+            MenuItem::PlanetLabels => checkbox_text("  Planet labels", labels.planets),
+            MenuItem::MoonLabels => checkbox_text("  Moon labels", labels.moons),
+            MenuItem::StarLabels => checkbox_text("  Star labels", labels.stars),
+            MenuItem::StarMagLimit => {
+                format!("  Label stars brighter than mag {}", labels.star_mag_limit)
+            }
+            MenuItem::Quit => "Quit".to_string(),
+        }
+    }
 
-#[derive(Component)]
-pub struct StarLabelsButton;
+    pub fn apply(self, stars: &mut ShowCatalogStars, labels: &mut LabelSettings) {
+        match self {
+            MenuItem::CatalogStars => stars.0 = !stars.0,
+            MenuItem::Labels => labels.enabled = !labels.enabled,
+            MenuItem::PlanetLabels => labels.planets = !labels.planets,
+            MenuItem::MoonLabels => labels.moons = !labels.moons,
+            MenuItem::StarLabels => labels.stars = !labels.stars,
+            MenuItem::StarMagLimit => labels.star_mag_limit = labels.next_mag_limit(),
+            MenuItem::Quit => {}
+        }
+    }
+}
 
+/// On a button's text: which item it shows.
 #[derive(Component)]
-pub struct StarLabelsLabel;
+pub struct MenuItemText(pub MenuItem);
 
-fn checkbox_button(
-    p: &mut ChildSpawnerCommands,
-    marker: impl Bundle,
-    label_marker: impl Bundle,
-    text: &str,
-) {
+const BUTTON_BG: Color = Color::srgb(0.18, 0.18, 0.28);
+const BUTTON_HOVER: Color = Color::srgb(0.26, 0.26, 0.38);
+const QUIT_BG: Color = Color::srgb(0.40, 0.08, 0.08);
+const QUIT_HOVER: Color = Color::srgb(0.60, 0.12, 0.12);
+
+fn menu_button(p: &mut ChildSpawnerCommands, item: MenuItem) {
+    let quit = item == MenuItem::Quit;
     p.spawn((
-        marker,
+        item,
         Button,
         Node {
             width: Val::Percent(100.0),
-            padding: UiRect::axes(Val::Px(12.0), Val::Px(10.0)),
-            justify_content: JustifyContent::FlexStart,
+            padding: UiRect::axes(Val::Px(12.0), Val::Px(6.0)),
+            justify_content: if quit {
+                JustifyContent::Center
+            } else {
+                JustifyContent::FlexStart
+            },
             ..default()
         },
-        BackgroundColor(Color::srgb(0.18, 0.18, 0.28)),
+        BackgroundColor(if quit { QUIT_BG } else { BUTTON_BG }),
     ))
     .with_children(|b| {
         b.spawn((
-            label_marker,
-            Text::new(text),
+            MenuItemText(item),
+            Text::new(""),
             TextFont {
-                font_size: 17.0,
+                font_size: 15.0,
                 ..default()
             },
-            TextColor(Color::srgb(0.85, 0.85, 0.85)),
+            TextColor(if quit {
+                Color::WHITE
+            } else {
+                Color::srgb(0.85, 0.85, 0.85)
+            }),
         ));
     });
 }
@@ -78,35 +123,31 @@ pub fn setup_pause_menu(mut commands: Commands) {
             PauseMenu,
             Node {
                 position_type: PositionType::Absolute,
-                left: Val::Percent(35.0),
-                top: Val::Percent(28.0),
-                width: Val::Percent(30.0),
+                left: Val::Percent(30.0),
+                top: Val::Percent(10.0),
+                width: Val::Percent(40.0),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
-                row_gap: Val::Px(14.0),
-                padding: UiRect::all(Val::Px(28.0)),
+                row_gap: Val::Px(6.0),
+                padding: UiRect::all(Val::Px(20.0)),
                 ..default()
             },
             BackgroundColor(Color::srgba(0.02, 0.02, 0.10, 0.94)),
+            GlobalZIndex(10),
             Visibility::Hidden,
         ))
         .with_children(|p| {
             p.spawn((
                 Text::new("PAUSED"),
                 TextFont {
-                    font_size: 30.0,
+                    font_size: 26.0,
                     ..default()
                 },
                 TextColor(Color::WHITE),
             ));
-
-            checkbox_button(
-                p,
-                CatalogStarsButton,
-                CatalogStarsLabel,
-                &checkbox_text(CATALOG_STARS_LABEL, true),
-            );
-            checkbox_button(p, StarLabelsButton, StarLabelsLabel, "[ ] Star labels");
+            for item in MenuItem::TOGGLES {
+                menu_button(p, item);
+            }
             p.spawn((
                 Text::new(DATA_CREDIT),
                 TextFont {
@@ -115,28 +156,7 @@ pub fn setup_pause_menu(mut commands: Commands) {
                 },
                 TextColor(Color::srgb(0.6, 0.6, 0.7)),
             ));
-
-            p.spawn((
-                QuitButton,
-                Button,
-                Node {
-                    width: Val::Percent(100.0),
-                    padding: UiRect::axes(Val::Px(12.0), Val::Px(10.0)),
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.40, 0.08, 0.08)),
-            ))
-            .with_children(|b| {
-                b.spawn((
-                    Text::new("Quit"),
-                    TextFont {
-                        font_size: 17.0,
-                        ..default()
-                    },
-                    TextColor(Color::WHITE),
-                ));
-            });
+            menu_button(p, MenuItem::Quit);
         });
 }
 
@@ -181,59 +201,47 @@ pub fn update_pause_menu_visibility(
     }
 }
 
-type MenuButtonQuery<'a> = (
-    &'a Interaction,
-    &'a mut BackgroundColor,
-    Option<&'a QuitButton>,
-    Option<&'a CatalogStarsButton>,
-    Option<&'a StarLabelsButton>,
-);
+/// Rewrites the menu texts when a setting changes (and once at startup).
+pub fn sync_menu_text(
+    stars: Res<ShowCatalogStars>,
+    labels: Res<LabelSettings>,
+    mut texts: Query<(&MenuItemText, &mut Text)>,
+) {
+    if !stars.is_changed() && !labels.is_changed() {
+        return;
+    }
+    for (item, mut text) in &mut texts {
+        let wanted = item.0.text(&stars, &labels);
+        if text.0 != wanted {
+            text.0 = wanted;
+        }
+    }
+}
 
 pub fn handle_menu_buttons(
-    mut interaction_query: Query<MenuButtonQuery, (Changed<Interaction>, With<Button>)>,
-    mut bg_stars: ResMut<ShowCatalogStars>,
-    mut star_labels: ResMut<ShowStarLabels>,
+    mut buttons: Query<(&Interaction, &mut BackgroundColor, &MenuItem), Changed<Interaction>>,
+    mut stars: ResMut<ShowCatalogStars>,
+    mut labels: ResMut<LabelSettings>,
     mut exit: EventWriter<AppExit>,
     menu_open: Res<MenuOpen>,
-    mut bg_label_query: Query<&mut Text, (With<CatalogStarsLabel>, Without<StarLabelsLabel>)>,
-    mut sl_label_query: Query<&mut Text, (With<StarLabelsLabel>, Without<CatalogStarsLabel>)>,
 ) {
     if !menu_open.0 {
         return;
     }
-    for (interaction, mut color, quit, bg_btn, sl_btn) in interaction_query.iter_mut() {
-        let is_quit = quit.is_some();
+    for (interaction, mut color, &item) in &mut buttons {
+        let quit = item == MenuItem::Quit;
         match *interaction {
             Interaction::Pressed => {
-                if is_quit {
+                if quit {
                     exit.write(AppExit::Success);
                 }
-                if bg_btn.is_some() {
-                    bg_stars.0 = !bg_stars.0;
-                    if let Ok(mut text) = bg_label_query.single_mut() {
-                        text.0 = checkbox_text(CATALOG_STARS_LABEL, bg_stars.0);
-                    }
-                }
-                if sl_btn.is_some() {
-                    star_labels.0 = !star_labels.0;
-                    if let Ok(mut text) = sl_label_query.single_mut() {
-                        text.0 = checkbox_text("Star labels", star_labels.0);
-                    }
-                }
+                item.apply(&mut stars, &mut labels);
             }
             Interaction::Hovered => {
-                *color = BackgroundColor(if is_quit {
-                    Color::srgb(0.60, 0.12, 0.12)
-                } else {
-                    Color::srgb(0.26, 0.26, 0.38)
-                });
+                *color = BackgroundColor(if quit { QUIT_HOVER } else { BUTTON_HOVER });
             }
             Interaction::None => {
-                *color = BackgroundColor(if is_quit {
-                    Color::srgb(0.40, 0.08, 0.08)
-                } else {
-                    Color::srgb(0.18, 0.18, 0.28)
-                });
+                *color = BackgroundColor(if quit { QUIT_BG } else { BUTTON_BG });
             }
         }
     }
@@ -257,8 +265,42 @@ mod tests {
     }
 
     #[test]
-    fn test_star_labels_off_by_default() {
-        assert!(!ShowStarLabels::default().0);
+    fn test_menu_items_toggle_their_settings() {
+        let mut stars = ShowCatalogStars::default();
+        let mut labels = LabelSettings::default();
+        assert_eq!(
+            MenuItem::MoonLabels.text(&stars, &labels),
+            "[x]   Moon labels"
+        );
+        MenuItem::MoonLabels.apply(&mut stars, &mut labels);
+        assert!(!labels.moons);
+        assert_eq!(
+            MenuItem::MoonLabels.text(&stars, &labels),
+            "[ ]   Moon labels"
+        );
+        MenuItem::CatalogStars.apply(&mut stars, &mut labels);
+        assert!(!stars.0);
+        for item in MenuItem::TOGGLES {
+            assert!(item.text(&stars, &labels).is_ascii());
+        }
+    }
+
+    #[test]
+    fn test_menu_text_follows_settings_changed_elsewhere() {
+        // e.g. the L hotkey or bench setup: the menu must not show a stale checkbox.
+        let mut app = crate::testing::headless_app();
+        app.init_resource::<ShowCatalogStars>()
+            .init_resource::<LabelSettings>()
+            .add_systems(Update, sync_menu_text);
+        let text = app
+            .world_mut()
+            .spawn((MenuItemText(MenuItem::Labels), Text::new("")))
+            .id();
+        app.update();
+        assert_eq!(app.world().get::<Text>(text).unwrap().0, "[x] Labels (L)");
+        app.world_mut().resource_mut::<LabelSettings>().enabled = false;
+        app.update();
+        assert_eq!(app.world().get::<Text>(text).unwrap().0, "[ ] Labels (L)");
     }
 
     #[test]

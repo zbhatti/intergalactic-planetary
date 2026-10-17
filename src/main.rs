@@ -10,6 +10,7 @@ mod gpu_compat;
 mod hyg;
 mod hyg_bodies;
 mod info;
+mod labels;
 mod menu;
 mod navigation;
 mod orbit;
@@ -22,6 +23,7 @@ mod stars;
 #[cfg(test)]
 mod testing;
 mod ui;
+mod zoom;
 
 fn main() {
     App::new()
@@ -47,6 +49,8 @@ fn main() {
             starfield::StarfieldPlugin,
             hyg_bodies::HygBodiesPlugin,
             perf::PerfPlugin,
+            zoom::ZoomPlugin,
+            labels::LabelsPlugin,
         ))
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(camera::CursorLocked(true))
@@ -64,7 +68,6 @@ fn main() {
         .insert_resource(menu::MenuOpen::default())
         .insert_resource(menu::ShowCatalogStars::default())
         .insert_resource(hyg::HygCatalog::embedded())
-        .insert_resource(menu::ShowStarLabels::default())
         .add_systems(
             Startup,
             (
@@ -85,6 +88,7 @@ fn main() {
                 menu::toggle_menu,
                 menu::update_pause_menu_visibility,
                 menu::handle_menu_buttons,
+                menu::sync_menu_text,
                 stars::adjust_exposure,
                 search::handle_search,
                 search::update_search_ui,
@@ -110,7 +114,6 @@ fn main() {
             (
                 stars::update_star_brightness,
                 solar_system::update_body_visual_size,
-                stars::update_star_labels,
                 navigation::update_target_reticle,
                 navigation::draw_offscreen_arrow,
                 ui::update_distance_label,

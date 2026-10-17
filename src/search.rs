@@ -34,6 +34,7 @@ pub fn setup_search_ui(mut commands: Commands) {
     commands
         .spawn((
             SearchPanel,
+            crate::labels::LabelBlocker,
             Node {
                 position_type: PositionType::Absolute,
                 top: Val::Px(40.0),

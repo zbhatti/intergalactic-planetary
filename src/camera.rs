@@ -4,6 +4,7 @@ use crate::gpu_compat;
 use crate::menu::MenuOpen;
 use crate::search::Search;
 use crate::speed::CurrentSpeed;
+use crate::zoom::{CameraFov, look_scale};
 use bevy::{
     input::mouse::MouseMotion,
     math::DVec3,
@@ -67,6 +68,7 @@ pub fn setup_camera(
             ..default()
         },
         Projection::Perspective(PerspectiveProjection {
+            fov: crate::zoom::DEFAULT_FOV,
             near: CAMERA_NEAR_AU,
             far: CAMERA_FAR_AU,
             ..default()
@@ -88,6 +90,7 @@ pub fn mouse_look(
     locked: Res<CursorLocked>,
     search: Res<Search>,
     goto: Res<GoTo>,
+    fov: Res<CameraFov>,
     mut motion: EventReader<MouseMotion>,
     mut query: Query<(&mut Transform, &mut FlyCam)>,
 ) {
@@ -98,9 +101,10 @@ pub fn mouse_look(
     let Ok((mut transform, mut cam)) = query.single_mut() else {
         return;
     };
+    let sensitivity = cam.sensitivity * look_scale(fov.0);
     for ev in motion.read() {
-        cam.yaw -= ev.delta.x * cam.sensitivity;
-        cam.pitch -= ev.delta.y * cam.sensitivity;
+        cam.yaw -= ev.delta.x * sensitivity;
+        cam.pitch -= ev.delta.y * sensitivity;
         cam.pitch = cam.pitch.clamp(-89.0, 89.0);
         transform.rotation = cam.rotation();
     }

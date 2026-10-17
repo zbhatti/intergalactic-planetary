@@ -1,11 +1,12 @@
 use crate::camera::FlyCam;
 use crate::constants::{AU_PER_PC, KM_PER_AU};
-use crate::coords::{BodyRadius, WorldPos, view_transform};
+use crate::coords::{BodyRadius, WorldPos};
 use crate::hyg::HygCatalog;
 use crate::info::{BodyInfo, BodyKind, star_facts};
-use crate::menu::ShowStarLabels;
+use crate::labels::{LabelLum, spawn_label};
 use crate::orbit::{equatorial_to_world, radec_to_equatorial};
 use crate::search::{ObjectCatalog, Search};
+use crate::zoom::{CameraFov, min_star_angle};
 use bevy::math::DVec3;
 use bevy::prelude::*;
 
@@ -113,14 +114,6 @@ pub struct Star {
     pub last_brightness: f32,
 }
 
-/// Links a UI text label entity back to the catalog star it tracks.
-#[derive(Component)]
-pub struct StarLabelFor(pub Entity);
-
-/// On a labelled body: only show its label when the camera is within this many AU.
-#[derive(Component)]
-pub struct LabelRange(pub f64);
-
 /// For each curated star (CATALOG_STARS order), its index in the HYG catalog. Matched stars
 /// are left out of the starfield (no double-drawing) and take their visual luminosity from HYG.
 #[derive(Resource, Default)]
@@ -217,20 +210,8 @@ pub fn setup_stars(
             ))
             .id();
 
-        commands.spawn((
-            StarLabelFor(star_entity),
-            Text::new(name),
-            TextFont {
-                font_size: 13.0,
-                ..default()
-            },
-            TextColor(Color::srgba(1.0, 0.9, 0.7, 0.85)),
-            Node {
-                position_type: PositionType::Absolute,
-                ..default()
-            },
-            Visibility::Hidden,
-        ));
+        commands.entity(star_entity).insert(LabelLum(visual_lum));
+        spawn_label(&mut commands, star_entity, name);
 
         catalog.0.push((name.to_string(), star_entity));
     }
@@ -239,7 +220,7 @@ pub fn setup_stars(
 }
 
 /// Recomputes star brightness and size from the camera distance. Runs only when the camera
-/// moved or the exposure changed.
+/// moved or the exposure or FOV changed.
 pub fn update_star_brightness(
     cam_query: Query<Ref<WorldPos>, With<FlyCam>>,
     mut star_query: Query<
@@ -253,12 +234,14 @@ pub fn update_star_brightness(
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
     exposure: Res<ExposureSettings>,
+    fov: Res<CameraFov>,
 ) {
     let Ok(cam) = cam_query.single() else { return };
-    if !cam.is_changed() && !exposure.is_changed() {
+    if !cam.is_changed() && !exposure.is_changed() && !fov.is_changed() {
         return;
     }
     let ev_factor = exposure.factor();
+    let min_angle = min_star_angle(fov.0);
 
     for (pos, mut transform, mat_handle, mut star) in star_query.iter_mut() {
         let dist_au = pos.0.distance(cam.0);
@@ -279,7 +262,7 @@ pub fn update_star_brightness(
         // Scale the sphere so its angular diameter is always >= MIN_STAR_ANGLE.
         // When the camera is close, physical size takes over naturally.
         let physical_radius = (star.radius_solar as f64 * SOLAR_RADIUS_UNITS) as f32;
-        let visual_radius = star_visual_radius(physical_radius, dist_au as f32);
+        let visual_radius = star_visual_radius(physical_radius, dist_au as f32, min_angle);
         let scale = Vec3::splat(visual_radius / physical_radius);
         if transform.scale != scale {
             transform.scale = scale;
@@ -288,52 +271,9 @@ pub fn update_star_brightness(
 }
 
 /// Returns the visual sphere radius that ensures a star subtends at least
-/// MIN_STAR_ANGLE regardless of distance, while preserving physical size up close.
-pub fn star_visual_radius(physical_radius: f32, cam_dist_units: f32) -> f32 {
-    physical_radius.max(cam_dist_units * MIN_STAR_ANGLE)
-}
-
-pub fn update_star_labels(
-    show: Res<ShowStarLabels>,
-    cam_query: Query<(&Camera, &WorldPos, &Transform), With<FlyCam>>,
-    positions: Query<(&WorldPos, Option<&LabelRange>)>,
-    mut label_query: Query<(&StarLabelFor, &mut Node, &mut Visibility)>,
-    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
-) {
-    let Ok((camera, cam_pos, cam_t)) = cam_query.single() else {
-        return;
-    };
-    let view = view_transform(cam_t.rotation);
-    let vp = windows
-        .single()
-        .map(|w| Vec2::new(w.width(), w.height()))
-        .unwrap_or(Vec2::new(1280.0, 720.0));
-
-    for (label_for, mut node, mut vis) in label_query.iter_mut() {
-        if !show.0 {
-            vis.set_if_neq(Visibility::Hidden);
-            continue;
-        }
-        let screen = positions.get(label_for.0).ok().and_then(|(pos, range)| {
-            if range.is_some_and(|r| pos.0.distance(cam_pos.0) > r.0) {
-                return None;
-            }
-            camera
-                .world_to_viewport(&view, (pos.0 - cam_pos.0).as_vec3())
-                .ok()
-                .filter(|sp| sp.x >= 0.0 && sp.x <= vp.x && sp.y >= 0.0 && sp.y <= vp.y)
-        });
-        match screen {
-            Some(sp) => {
-                vis.set_if_neq(Visibility::Visible);
-                node.left = Val::Px(sp.x + 8.0);
-                node.top = Val::Px(sp.y - 8.0);
-            }
-            None => {
-                vis.set_if_neq(Visibility::Hidden);
-            }
-        }
-    }
+/// `min_angle` (`zoom::min_star_angle`, MIN_STAR_ANGLE at the default FOV) regardless of distance, while preserving physical size up close.
+pub fn star_visual_radius(physical_radius: f32, cam_dist_units: f32, min_angle: f32) -> f32 {
+    physical_radius.max(cam_dist_units * min_angle)
 }
 
 pub fn adjust_exposure(
@@ -475,7 +415,7 @@ mod tests {
     fn test_visual_radius_uses_physical_size_when_close() {
         let physical = 4.0; // AU – large star like Betelgeuse up close
         let dist = 0.5; // 0.5 AU away
-        let visual = star_visual_radius(physical, dist);
+        let visual = star_visual_radius(physical, dist, MIN_STAR_ANGLE);
         assert_eq!(visual, physical, "physical size should dominate when close");
     }
 
@@ -484,7 +424,7 @@ mod tests {
         // Sirius: physical radius ≈ 1.711 × 0.00465 AU ≈ 0.00796 AU, distance ≈ 543,920 AU
         let physical: f32 = 1.711 * SOLAR_RADIUS_UNITS as f32;
         let dist: f32 = (2.637 * AU_PER_PC) as f32;
-        let visual = star_visual_radius(physical, dist);
+        let visual = star_visual_radius(physical, dist, MIN_STAR_ANGLE);
         assert!(
             visual > physical,
             "distant star should be scaled up; physical={:.5}, visual={:.5}",
@@ -506,7 +446,7 @@ mod tests {
         // Deneb: radius ≈ 203 solar radii, distance ≈ 802 pc ≈ 1.65e8 AU
         let physical: f32 = 203.0 * SOLAR_RADIUS_UNITS as f32;
         let dist: f32 = (802.0 * AU_PER_PC) as f32;
-        let visual = star_visual_radius(physical, dist);
+        let visual = star_visual_radius(physical, dist, MIN_STAR_ANGLE);
         let angle = visual / dist;
         assert!(
             angle >= MIN_STAR_ANGLE,

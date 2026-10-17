@@ -47,8 +47,8 @@ the real 206,265. Headless tests fly to a body ~5 Mpc away and check arrival and
 | 7 | ✅ **Solar system browser**: tree of star → planets → moons, click to select | Solar system browser window | B opens; keyboard-driven | Low |
 | 8 | ✅ (109k HYG stars in 623 chunk draws at 60 fps on HD 520; 540 named stars searchable; any visible star clickable; sphere proxy within 2000 AU) **Larger star catalog**: HYG (~120k stars) as **one instanced draw with camera-relative positions on the GPU**, not 120k entities. Measured in Phase 1: a full rebase over 120k entities costs 3.4 ms/frame on the i7-6600U. Only the brightest get labels | Night sky density from Earth | 58 stars | Med — profile on iGPU |
 | 9 | **Exoplanet systems** from the NASA Exoplanet Archive attached to their host stars | Visit a known exoplanet host | None | Low–Med |
-| 10 | **Field of view zoom** (mouse wheel), FOV in HUD | Zoom in on a distant object | Fixed FOV | Low |
-| 11 | **Label/marker filtering** by type and by distance/brightness — essential once there are 10^5+ objects | Label/marker settings | One on/off toggle | Low |
+| 10 | ✅ **Field of view zoom** (mouse wheel), FOV in HUD | Zoom in on a distant object | 120 deg to 0.01 deg; points keep their pixel size; look sensitivity scales | Low |
+| 11 | ✅ **Label/marker filtering** by type and by distance/brightness — essential once there are 10^5+ objects | Label/marker settings | Type toggles + star magnitude limit (Esc menu), L on/off, declutter, hidden behind planets, moons appear once separated from their planet | Low |
 | 12 | **Coordinate grids and constellation lines** (equatorial/ecliptic/galactic, IAU lines) | Grid and constellation toggles | None | Low (gizmos) |
 | 13 | **Star browser**: nearest/brightest stars around the camera, sortable, click to go | Star browser window | None | Low |
 | 14 | **Bookmarks / saved locations** (position, orientation, target) | Locations / bookmarks | None | Low |

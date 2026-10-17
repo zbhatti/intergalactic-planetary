@@ -12,8 +12,9 @@ use crate::constants::{AU_PER_LY, AU_PER_PC};
 use crate::coords::{BodyRadius, FloatingOrigin, NavSet, WorldPos, render_offset};
 use crate::hyg::HygCatalog;
 use crate::info::{BodyInfo, BodyKind, format_sig};
+use crate::labels::{LabelLum, spawn_label};
 use crate::search::ObjectCatalog;
-use crate::starfield::{StarPoints, StarfieldMaterial};
+use crate::starfield::{StarPoints, StarfieldHide};
 use crate::stars::{CuratedHygMatches, SOLAR_RADIUS_UNITS, Star, spectral_color};
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -180,6 +181,8 @@ pub fn spawn_named_stars(
             continue;
         }
         let e = promote(&mut commands, &catalog, &mut entities, *i);
+        commands.entity(e).insert(LabelLum(catalog.stars[*i].lum));
+        spawn_label(&mut commands, e, name);
         objects.0.push((name.clone(), e));
     }
 }
@@ -200,7 +203,7 @@ pub fn update_star_proxy(
     mut proxy: ResMut<Proxy>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut std_materials: ResMut<Assets<StandardMaterial>>,
-    mut field_materials: ResMut<Assets<StarfieldMaterial>>,
+    mut hide: ResMut<StarfieldHide>,
 ) {
     let wanted = points
         .nearest
@@ -237,11 +240,7 @@ pub fn update_star_proxy(
     let new = proxy.index.map_or(Vec4::ZERO, |i| {
         render_offset(catalog.stars[i].pos, origin.0).extend(HIDE_RADIUS_AU)
     });
-    for (_, mat) in field_materials.iter_mut() {
-        if mat.params.hide != new {
-            mat.params.hide = new;
-        }
-    }
+    hide.set_if_neq(StarfieldHide(new));
 }
 
 pub struct HygBodiesPlugin;
@@ -314,35 +313,18 @@ mod tests {
         app.add_plugins(AssetPlugin::default())
             .init_asset::<Mesh>()
             .init_asset::<StandardMaterial>()
-            .init_asset::<StarfieldMaterial>()
             .insert_resource(HygCatalog::embedded())
+            .init_resource::<StarfieldHide>()
             .init_resource::<StarPoints>()
             .init_resource::<FloatingOrigin>()
             .init_resource::<HygEntities>()
             .init_resource::<Proxy>()
             .add_systems(Update, update_star_proxy);
-        let handle = app
-            .world_mut()
-            .resource_mut::<Assets<StarfieldMaterial>>()
-            .add(StarfieldMaterial {
-                params: crate::starfield::StarfieldParams::new(1.0),
-            });
-        // Keep a strong handle, or the asset is freed on the next update.
-        app.insert_resource(KeepMaterial(handle));
         app
     }
 
-    #[derive(Resource)]
-    struct KeepMaterial(#[allow(dead_code)] Handle<StarfieldMaterial>);
-
     fn hide_uniform(app: &App) -> Vec4 {
-        let mats = app.world().resource::<Assets<StarfieldMaterial>>();
-        mats.iter()
-            .next()
-            .expect("one starfield material")
-            .1
-            .params
-            .hide
+        app.world().resource::<StarfieldHide>().0
     }
 
     fn set_nearest(app: &mut App, nearest: Option<(usize, f64)>) {

@@ -87,9 +87,11 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `hyg.rs` | Embedded HYG catalog (`data/hyg_stars.bin`): little-endian parser, magnitudes, direction matching |
 | `hyg_bodies.rs` | HYG stars as entities on demand: 540 named (search/go-to), crosshair-picked, and a close-range sphere proxy for the nearest star (<2000 AU) |
 | `starfield.rs` + `starfield.wgsl` | 109k HYG stars as billboard meshes in 200 pc chunks (one draw each); shader brightness/size = same model as `stars.rs`; nearest-catalog-star scan |
+| `zoom.rs` | Mouse-wheel FOV (`CameraFov`), `min_star_angle(fov)` keeps points the same pixel size at any zoom |
+| `labels.rs` | Name labels: type/magnitude filters (`LabelSettings`), primary-separation rule for moons, occlusion by planet disks, greedy declutter, HUD avoidance (`LabelBlocker`) |
 | `ui.rs` | Distance/speed/exposure HUD labels, `format_distance`, `format_speed` |
 | `navigation.rs` | HUD reticle, off-screen arrow gizmo, camera auto-orient |
-| `menu.rs` | Esc pause menu, background stars toggle, quit button |
+| `menu.rs` | Esc pause menu: data-driven `MenuItem` toggles whose text is regenerated from the settings |
 | `gpu_compat.rs` | Old-GPU workarounds: wgpu debug labels off, bloom only if `Rg11b10Ufloat` is renderable, no GPU culling on GL-only |
 | `perf.rs` | F3 perf overlay, `IP_BENCH` scripted benchmark mode, frame-time stats |
 | `testing.rs` | Headless test harness (test builds only): fixed 60 Hz clock, real key events |
@@ -110,6 +112,8 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | Arrow Up/Down | Navigate search results |
 | Enter (in search) | Select object, orient camera toward it |
 | Esc (in search) | Close search |
+| Mouse wheel / middle click | Zoom (FOV 120 deg to 0.01 deg) / reset |
+| L | Labels on/off |
 | Esc | Open/close pause menu |
 | F3 | Toggle performance overlay (fps, frame times, entity count) |
 | F12 | Save screenshot |
@@ -201,6 +205,20 @@ catalog star, `hyg_bodies::update_star_proxy` gives that star's entity a real sp
 system as the curated stars) and hides its point through the `hide` uniform. Don't remove the hide: a point drawn
 a few AU off would sit visibly beside the sphere. The starfield blends additively (`AlphaMode::Add`, fragment
 alpha 0). Opaque billboards would draw dim stars as black disks over things behind them.
+
+### 12. Zoom changes the minimum point size
+
+Points and min-size spheres use `zoom::min_star_angle(fov)`, not `MIN_STAR_ANGLE` directly, so a
+star stays ~2-3 px wide at every FOV. Anything that caches sizes on "camera moved" must also
+recompute on `CameraFov` changes (`update_star_brightness`, `update_body_visual_size`, the
+starfield uniform).
+
+### 13. Don't touch Assets or UI nodes when nothing changed
+
+`Assets::iter_mut` marks *every* asset it visits as modified (a GPU re-upload), even if you don't
+write. Keep a handle and compare before `get_mut` (see `starfield::sync_starfield_params`). Likewise
+for UI: writing `Text` or `Node` re-runs layout, so compare first. Hide labels with
+`Display::None` (skipped by layout), not `Visibility::Hidden`.
 
 ### 10. Benchmarks need an awake display
 
