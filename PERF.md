@@ -38,6 +38,8 @@ cargo test --release -- --ignored --nocapture perf_   # CPU micro-benchmarks for
 | 2026-10-16 | Phase 2.3: solar system browser open (tour: Saturn, keys: B) | release | 361 | 16.67 | 17.70 | 19.66 | 0 | 2211 |
 | 2026-10-16 | Phase 2.4: HYG starfield, 109k stars / 623 chunks; 2000 random bg stars removed | release | 1201 | 16.67 | 17.57 | 27.72 | 1 | 835 |
 | 2026-10-16 | Phase 2.5: named HYG entities (+483), sphere proxy, additive starfield (tour: Barnard's Star) | release | 720 | 16.67 | 17.45 | 21.67 | 0 | 1318 |
+| 2026-10-17 | Old-GPU fixes (#10, #11): Vulkan | release | 1201 | 16.67 | 17.62 | 22.28 | 0 | 1319 |
+| 2026-10-17 | Old-GPU fixes: `WGPU_BACKEND=gl` (bloom off, no GPU culling) | release | 1192 | 16.78 | 17.02 | 34.41 | 4 | 1319 |
 
 ## Micro-benchmarks (`cargo test --release -- --ignored --nocapture perf_`)
 
