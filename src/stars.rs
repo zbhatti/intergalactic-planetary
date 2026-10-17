@@ -339,7 +339,10 @@ pub fn update_star_brightness(
             sphere_brightness(ev_factor, star.visual_lum, radius_au, dist_au, min_angle);
         // Dust between the camera and the star dims and reddens it (stars' luminosities are
         // de-reddened at startup, so from home this restores the observed brightness).
+        // Dust depends only on where the camera is: exposure changes (every frame while
+        // auto-exposure adapts) reuse the last transmission.
         let t = match (&dust, &dust_settings) {
+            _ if !cam.is_changed() && !dust_changed => star.dust,
             (Some(d), Some(s)) if !star.no_dust => transmission(av_between(d, s, cam.0, pos.0)),
             _ => [1.0; 3],
         };

@@ -185,6 +185,9 @@ fn menu_button(p: &mut ChildSpawnerCommands, item: MenuItem) {
     });
 }
 
+/// Toggles in the left column (catalog and labels); the rest go on the right (sky and camera).
+const LEFT_COLUMN: usize = 9;
+
 pub fn setup_pause_menu(mut commands: Commands) {
     commands
         .spawn((
@@ -192,17 +195,18 @@ pub fn setup_pause_menu(mut commands: Commands) {
             crate::labels::LabelBlocker,
             Node {
                 position_type: PositionType::Absolute,
-                left: Val::Percent(30.0),
-                top: Val::Percent(10.0),
-                width: Val::Percent(40.0),
+                left: Val::Percent(10.0),
+                top: Val::Percent(6.0),
+                width: Val::Percent(80.0),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 row_gap: Val::Px(6.0),
-                padding: UiRect::all(Val::Px(20.0)),
+                padding: UiRect::all(Val::Px(16.0)),
                 ..default()
             },
             BackgroundColor(Color::srgba(0.02, 0.02, 0.10, 0.94)),
-            GlobalZIndex(10),
+            // Above the other panels (info, browser, search at 10).
+            GlobalZIndex(20),
             Visibility::Hidden,
         ))
         .with_children(|p| {
@@ -214,9 +218,32 @@ pub fn setup_pause_menu(mut commands: Commands) {
                 },
                 TextColor(Color::WHITE),
             ));
-            for item in MenuItem::TOGGLES {
-                menu_button(p, item);
-            }
+            // Two columns, so the menu (and the license credits below it) fit a 720 px window.
+            p.spawn(Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(12.0),
+                ..default()
+            })
+            .with_children(|row| {
+                for items in [
+                    &MenuItem::TOGGLES[..LEFT_COLUMN],
+                    &MenuItem::TOGGLES[LEFT_COLUMN..],
+                ] {
+                    row.spawn(Node {
+                        flex_direction: FlexDirection::Column,
+                        flex_grow: 1.0,
+                        flex_basis: Val::Px(0.0),
+                        row_gap: Val::Px(6.0),
+                        ..default()
+                    })
+                    .with_children(|col| {
+                        for &item in items {
+                            menu_button(col, item);
+                        }
+                    });
+                }
+            });
             p.spawn((
                 Text::new(DATA_CREDIT),
                 TextFont {
