@@ -57,14 +57,15 @@ the real 206,265. Headless tests fly to a body ~5 Mpc away and check arrival and
 
 ## Phase 2b — The interstellar medium we know (observed data only)
 
-Making the Milky Way feel real before leaving it. Only observed ISM here; modelled parts (beyond the
-data's reach) come with Phase 3.
+Making the Milky Way feel real before leaving it. Observed ISM here, plus one modelled part (14e)
+that the observed dust needs as a background; the rest of the modelling comes with Phase 3.
 
 | # | Feature | IP today |
 |---|---|---|
 | 14b | ✅ **Catalogued nebulae** with colours from their visible spectra | 168 Sharpless H II regions (distances from Gaia parallaxes, OB stars, WISE) + 52 van den Bergh reflection nebulae at their stars; CIE colours from emission lines / scattered starlight, checked against van den Bergh's observed plate colours |
 | 14c | ✅ **3D dust: extinction and reddening** from the camera, Edenhofer et al. 2024 map (CC BY 4.0, 1.25 kpc) | 12 pc grid (2.9 MB); catalog de-reddened at startup, A_V from the camera applied on GPU (stars, nebulae) and CPU (labels, browser, picking, auto-exposure); CCM89 reddening |
 | 14d | **Visible dust**: dark clouds against nebulae and stars; per-region nebula line ratios where measured | Later |
+| 14e | ✅ **The Milky Way's glow (modelled)**: unresolved starlight behind the dust, so the Great Rift and other dark lanes show | A model, not data (brought forward from Phase 3 so the observed dust has a background): thin/thick discs normalized to Flynn+ 2006 (0.056 L_sun/pc^3, 24.4 L_sun/pc^2), bar/bulge, R0 = 8.2 kpc; catalog's share subtracted per distance shell; Edenhofer dust plus a smooth disc beyond 1.25 kpc. Matches Pioneer 10 integrated starlight within ~10% at b = -8 and -14 deg |
 
 ## Phase 3 — Real content, large scale (Milky Way → Laniakea)
 

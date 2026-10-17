@@ -67,7 +67,7 @@ pub fn transmission(av: f64) -> [f32; 3] {
     channel_extinction_ratios().map(|k| 10f64.powf(-0.4 * av * k as f64) as f32)
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct DustGrid {
     pub n: [usize; 3],
     pub voxel_pc: f64,

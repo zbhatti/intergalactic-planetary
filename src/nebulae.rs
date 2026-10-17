@@ -307,6 +307,17 @@ impl Material for NebulaMaterial {
     }
 }
 
+/// Outward-facing (counter-clockwise) triangles of a cube whose vertex i has coordinates
+/// (bit 0, bit 1, bit 2) of i -> (x, y, z) sign; the pipelines cull the front ones.
+pub const CUBE_INDICES: [u32; 36] = [
+    0, 2, 3, 0, 3, 1, // -z
+    4, 5, 7, 4, 7, 6, // +z
+    0, 1, 5, 0, 5, 4, // -y
+    2, 6, 7, 2, 7, 3, // +y
+    0, 4, 6, 0, 6, 2, // -x
+    1, 3, 7, 1, 7, 5, // +x
+];
+
 /// A cube of half-size `radius` around the origin, carrying the nebula's colour and radius.
 pub fn nebula_mesh(radius: f32, rgb: [f32; 3]) -> Mesh {
     let r = radius;
@@ -319,22 +330,13 @@ pub fn nebula_mesh(radius: f32, rgb: [f32; 3]) -> Mesh {
             ]
         })
         .collect();
-    // Outward-facing (counter-clockwise) triangles; the pipeline culls the front ones.
-    let indices: Vec<u32> = vec![
-        0, 2, 3, 0, 3, 1, // -z
-        4, 5, 7, 4, 7, 6, // +z
-        0, 1, 5, 0, 5, 4, // -y
-        2, 6, 7, 2, 7, 3, // +y
-        0, 4, 6, 0, 6, 2, // -x
-        1, 3, 7, 1, 7, 5, // +x
-    ];
     Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::RENDER_WORLD,
     )
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
     .with_inserted_attribute(ATTRIBUTE_NEBULA, vec![[rgb[0], rgb[1], rgb[2], r]; 8])
-    .with_inserted_indices(Indices::U32(indices))
+    .with_inserted_indices(Indices::U32(CUBE_INDICES.to_vec()))
 }
 
 /// Whether nebulae are drawn (Esc menu). On by default.

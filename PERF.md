@@ -52,6 +52,8 @@ cargo test --release -- --ignored --nocapture perf_   # CPU micro-benchmarks for
 | 2026-10-17 | ISM 2: 3D dust, per-star GPU march (dust on) | release | 1199 | 16.70 | 17.81 | 30.86 | 2 | 7446 |
 | 2026-10-17 | ISM 2: same, dust off (comparison) | release | 1201 | 16.67 | 17.83 | 32.12 | 1 | 7446 |
 | 2026-10-17 | ISM 2: toward Sagittarius at EV+8, dust on (most stars marched) | release | 601 | 16.67 | 17.64 | 26.64 | 1 | 7445 |
+| 2026-10-17 | ISM 3: Milky Way glow, tour (glow off for comparison: mean 16.93-17.24, p95 20.6-22.6) | release | 1168 | 17.15 | 22.39 | 47.96 | 26 | 7452 |
+| 2026-10-17 | ISM 3: toward Altair at EV+9, glow visible full screen (off: mean 16.67-16.73) | release | 601 | 16.67 | 19.20 | 39.38 | 1 | 7451 |
 
 ## Micro-benchmarks (`cargo test --release -- --ignored --nocapture perf_`)
 
@@ -61,4 +63,5 @@ Same machine, single-threaded, per call/frame.
 |---|---|---|---|---|
 | 2026-10-16 | `perf_find_nearest` (nearest-surface scan) | 6.2 µs | 0.48 ms | Linear scan; fine up to ~10^5 |
 | 2026-10-16 | `perf_rebase_sync` (camera moves + full rebase, headless frame) | 0.20 ms | 3.44 ms | 120k entities would cost ~20% of a 60 Hz frame while flying fast, so the HYG catalog must be an instanced draw, not entities |
+| 2026-10-17 | `perf_render_sky` (Milky Way glow, 384x192 rays through the dust, one thread, background) | — | 0.82-0.90 s | Recomputed only after moving 10 pc, stopping, and with the glow visible. Before those rules, the background recompute cost the far tour ~1.3 ms/frame and 3x the hitches on this 15 W CPU+GPU package even at nice 19 |
 | 2026-10-16 | `perf_nearest_catalog_star` (HYG, f64 scan; only on frames the camera moved) | — | 0.26 ms (n = 109,389) | Fine for now; a chunk-grid lookup would make it ~O(1) if needed |

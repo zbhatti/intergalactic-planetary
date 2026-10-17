@@ -204,7 +204,8 @@ pub fn bench_setup(
     {
         *fov = CameraFov(deg.to_radians()).zoomed(0.0);
     }
-    bg.0 = true;
+    // `IP_BENCH_STARS=0`: no catalog starfield (to see the Milky Way glow alone).
+    bg.0 = !std::env::var("IP_BENCH_STARS").is_ok_and(|v| v == "0");
     labels.enabled = true;
     labels.star_mag_limit = 6.0;
     *sky = SkySettings {
@@ -212,6 +213,8 @@ pub fn bench_setup(
         ecliptic_grid: true,
         galactic_grid: true,
         constellations: true,
+        // `IP_BENCH_GLOW=0`: no Milky Way glow (for comparison).
+        milky_way: !std::env::var("IP_BENCH_GLOW").is_ok_and(|v| v == "0"),
     };
     overlay.0 = true;
     let names = std::env::var("IP_BENCH_KEYS").unwrap_or_default();

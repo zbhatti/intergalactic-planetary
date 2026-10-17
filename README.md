@@ -25,6 +25,11 @@ supercluster).
 - **Interstellar dust** from a real 3D dust map (Edenhofer et al. 2024, 1.25 kpc around the Sun):
   stars and nebulae behind dust are dimmed and reddened as seen from wherever you are. From Earth
   the sky looks as observed; fly past a cloud and what's behind it changes. Toggle in the Esc menu.
+- **The Milky Way's glow**: the light of the billions of stars too faint to be in any catalog, from
+  a model of the galaxy (discs and bulge, calibrated to the measured local starlight), with the dust
+  in front of it. The Great Rift from Cygnus to Sagittarius appears as dust in silhouette, and the
+  Galactic centre stays hidden. As faint as the real one: turn auto-exposure off and raise the
+  exposure to see it like a photograph. It's a model, not data, and the Esc menu can turn it off.
 - **Info panel** (type, radius, mass, temperature, luminosity, distance), **solar system browser**,
   **star browser** (nearest or brightest from wherever you are), **search**, and **saved locations**
   that persist between runs.
@@ -50,7 +55,7 @@ supercluster).
 | I | Show/hide the info panel |
 | B | Solar system browser |
 | N | Nearest stars (Tab: brightest from here) |
-| K | Saved locations (save the view, jump back, Delete removes) |
+| K | Saved locations (save the view, jump back, Delete or Backspace removes) |
 | L | Labels on/off (per-type filters in the Esc menu) |
 | C | Constellation figures and names |
 | Enter | Search (arrows to pick, Enter to select, Esc to close) |

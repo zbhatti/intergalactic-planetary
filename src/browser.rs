@@ -225,7 +225,8 @@ pub fn browser_input(
         } else {
             browser.open = None;
         }
-    } else if keys.just_pressed(KeyCode::Delete)
+    // Backspace too: a Mac's "delete" key is Backspace (Delete needs Fn).
+    } else if keys.any_just_pressed([KeyCode::Delete, KeyCode::Backspace])
         && let Some(action) = current
     {
         delete.write(BrowserDelete(action));
@@ -478,6 +479,35 @@ mod tests {
         // N closes the star panel whichever sort it shows.
         tap(&mut app, KeyCode::KeyN);
         assert!(!app.world().resource::<Browser>().is_open());
+    }
+
+    #[test]
+    fn test_delete_and_backspace_send_delete() {
+        // A Mac's "delete" key is Backspace; Delete needs Fn there.
+        for key in [KeyCode::Delete, KeyCode::Backspace] {
+            let mut app = headless_app();
+            app.init_resource::<Search>()
+                .init_resource::<crate::menu::MenuOpen>()
+                .add_plugins(BrowserPluginHeadless);
+            let info = |n: &str| BodyInfo {
+                name: n.into(),
+                kind: crate::info::BodyKind::Planet,
+                facts: vec![],
+            };
+            let sun = app.world_mut().spawn(info("Sun")).id();
+            app.world_mut().spawn((
+                info("Mercury"),
+                OrbitOf {
+                    primary: sun,
+                    a_au: 0.39,
+                },
+            ));
+            tap(&mut app, KeyCode::KeyB);
+            press_key(&mut app, key);
+            run_frames(&mut app, 1);
+            let sent = app.world().resource::<Events<BrowserDelete>>().len();
+            assert_eq!(sent, 1, "{key:?}");
+        }
     }
 
     #[test]

@@ -16,6 +16,7 @@ mod info;
 mod labels;
 mod locations;
 mod menu;
+mod milky_way;
 mod navigation;
 mod nebulae;
 mod orbit;
@@ -76,6 +77,7 @@ fn main() {
             locations::LocationsPlugin,
             exoplanets::ExoplanetsPlugin,
             nebulae::NebulaePlugin,
+            milky_way::MilkyWayPlugin,
         ))
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(camera::CursorLocked(true))
