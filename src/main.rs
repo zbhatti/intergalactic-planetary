@@ -6,6 +6,7 @@ mod camera;
 mod constants;
 mod coords;
 mod goto;
+mod gpu_compat;
 mod hyg;
 mod hyg_bodies;
 mod info;
@@ -24,13 +25,20 @@ mod ui;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "IP - Intergalactic Planetary".into(),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "IP - Intergalactic Planetary".into(),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(bevy::render::RenderPlugin {
+                    render_creation: gpu_compat::wgpu_settings().into(),
+                    ..default()
+                }),
+        )
         .add_plugins((
             coords::CoordsPlugin,
             goto::GoToPlugin,
