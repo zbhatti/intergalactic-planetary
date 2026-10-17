@@ -79,7 +79,7 @@ pub fn handle_search(
     menu_open: Res<MenuOpen>,
     browser: Option<Res<crate::browser::Browser>>,
 ) {
-    if browser.is_some_and(|b| b.open) {
+    if browser.is_some_and(|b| b.is_open()) {
         key_events.clear();
         return;
     }

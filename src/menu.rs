@@ -198,7 +198,7 @@ pub fn toggle_menu(
     mut windows: Query<&mut Window>,
     browser: Res<crate::browser::Browser>,
 ) {
-    if search.active || browser.open {
+    if search.active || browser.is_open() {
         return;
     }
     if keys.just_pressed(KeyCode::Escape) {

@@ -76,7 +76,9 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `constants.rs` | Physical constants: `C_AU_PER_S`, `KM_PER_AU`, `AU_PER_LY` |
 | `coords.rs` | `WorldPos`/`BodyRadius`, floating origin + rebase, nearest-body scan, `NavSet` ordering |
 | `info.rs` | `BodyInfo`/`BodyKind` (name + facts per object), crosshair click-select, info panel (I) |
-| `browser.rs` | B: solar system browser (Sun → planets/dwarfs → moons by orbit size) |
+| `browser.rs` | The list panel (`Browser`, also the keyboard focus: search/menu ignore keys while it's open). B: solar system tree. Rows carry a `RowAction`; Enter/Delete send `BrowserActivate`/`BrowserDelete` to the module that built them |
+| `star_browser.rs` | N: nearest / (Tab) brightest stars from the camera, whole HYG catalog + Sun, computed on open |
+| `locations.rs` | K: saved views (position, yaw/pitch, selection) in `<data dir>/intergalactic-planetary/locations.tsv` (`IP_DATA_DIR` overrides) |
 | `goto.rs` | G: go-to flight (turn, then log-distance travel to a few radii from the target) |
 | `camera.rs` | `FlyCam` component, `CursorLocked` resource, camera spawn + WASD movement in world space |
 | `search.rs` | `Search` + `ObjectCatalog` resources, search UI, `catalog_matches` |
@@ -108,6 +110,8 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | Left click | Select the object under the center crosshair |
 | I | Show/hide the info panel for the selection |
 | B | Solar system browser (Up/Down, Enter to select, B/Esc to close) |
+| N | Star browser: nearest stars, Tab for brightest from here |
+| K | Locations: Enter saves the current view / jumps to a saved one, Delete removes |
 | `[` / `]` | Decrease / increase exposure (EV-5 to EV+20) |
 | Enter | Open object search |
 | Arrow Up/Down | Navigate search results |
