@@ -203,6 +203,8 @@ pub fn spawn_hosts(
     mut entities: ResMut<HygEntities>,
     mut objects: ResMut<ObjectCatalog>,
 ) {
+    let mut known: std::collections::HashSet<String> =
+        objects.0.iter().map(|(n, _)| n.clone()).collect();
     for (k, sys) in systems.0.iter().enumerate() {
         let e = promote_named(
             &mut commands,
@@ -212,7 +214,7 @@ pub fn spawn_hosts(
             sys.host.name.clone(),
         );
         commands.entity(e).insert(ExoHostOf(k));
-        if !objects.0.iter().any(|(n, _)| *n == sys.host.name) {
+        if known.insert(sys.host.name.clone()) {
             objects.0.push((sys.host.name.clone(), e));
         }
         for p in &sys.host.planets {
@@ -423,6 +425,7 @@ pub fn setup_planet_materials(
 pub fn update_exo_planets(
     mut commands: Commands,
     cam: Query<Ref<WorldPos>, With<FlyCam>>,
+    hosts: Query<&WorldPos, (With<ExoHostOf>, Without<FlyCam>)>,
     systems: Res<ExoSystems>,
     catalog: Res<HygCatalog>,
     entities: Res<HygEntities>,
@@ -435,7 +438,14 @@ pub fn update_exo_planets(
         return;
     }
     for (k, sys) in systems.0.iter().enumerate() {
-        let star_pos = catalog.stars[sys.star].pos;
+        // The host entity's position, not the catalog's: for the curated stars (e.g. Pollux)
+        // the sphere sits at the curated table's coordinates, up to ~1e5 AU from HYG's.
+        let Some(&host_entity) = entities.0.get(&sys.star) else {
+            continue;
+        };
+        let star_pos = hosts
+            .get(host_entity)
+            .map_or(catalog.stars[sys.star].pos, |p| p.0);
         let dist = star_pos.distance(cam.0);
         let range = spawn_range_au(&sys.host);
         if dist > range * 2.0 {
@@ -449,9 +459,6 @@ pub fn update_exo_planets(
         if dist > range || spawned.0.contains_key(&k) {
             continue;
         }
-        let Some(&host_entity) = entities.0.get(&sys.star) else {
-            continue;
-        };
         let mut list = Vec::new();
         for p in &sys.host.planets {
             let radius_earth = planet_radius_earth(p);
@@ -639,6 +646,35 @@ mod tests {
             .id();
         app.update();
         (app, cam, star)
+    }
+
+    #[test]
+    fn test_planets_follow_the_host_entity_not_the_catalog_position() {
+        // Pollux (HD 62509) is a curated sphere ~3800 AU from its HYG position. Fake that with
+        // an entity registered for the HYG index, placed 1e5 AU away.
+        let (mut app, cam, _) = spawn_app();
+        let (star, max_a) = {
+            let systems = app.world().resource::<ExoSystems>();
+            let s = system(systems, "HD 62509");
+            (
+                s.star,
+                s.host.planets.iter().map(|p| p.a_au).fold(0.0, f64::max),
+            )
+        };
+        let host = app.world().resource::<HygEntities>().0[&star];
+        let sphere = app.world().resource::<HygCatalog>().stars[star].pos + DVec3::splat(1e5);
+        app.world_mut().get_mut::<WorldPos>(host).unwrap().0 = sphere;
+        app.world_mut().get_mut::<WorldPos>(cam).unwrap().0 = sphere + DVec3::new(0.0, 0.0, 1.0);
+        app.update();
+        app.update();
+        let mut q = app.world_mut().query::<(&WorldPos, &OrbitOf)>();
+        let planets: Vec<f64> = q
+            .iter(app.world())
+            .filter(|(_, o)| o.primary == host)
+            .map(|(p, _)| p.0.distance(sphere))
+            .collect();
+        assert!(!planets.is_empty(), "Pollux b spawned");
+        assert!(planets.iter().all(|&d| d <= max_a * 1.5), "{planets:?}");
     }
 
     #[test]
