@@ -5,6 +5,7 @@
 
 #import bevy_pbr::mesh_functions::get_world_from_local
 #import bevy_pbr::mesh_view_bindings::view
+#import ip::dust::{DustParams, dust_av, dust_transmission}
 
 struct NebulaParams {
     // 2^EV (including auto-exposure).
@@ -17,6 +18,9 @@ struct NebulaParams {
 };
 
 @group(2) @binding(0) var<uniform> params: NebulaParams;
+@group(2) @binding(1) var dust_texture: texture_3d<f32>;
+@group(2) @binding(2) var dust_sampler: sampler;
+@group(2) @binding(3) var<uniform> dust: DustParams;
 
 struct Vertex {
     @builtin(instance_index) instance_index: u32,
@@ -40,7 +44,10 @@ fn vertex(v: Vertex) -> VertexOutput {
     out.clip_position = view.clip_from_world * vec4<f32>(world, 1.0);
     out.world = world;
     out.center = (model * vec4<f32>(0.0, 0.0, 0.0, 1.0)).xyz;
-    out.nebula = v.nebula;
+    // Dust between the camera and the nebula's centre dims and reddens it (the line ratios are
+    // intrinsic, so this is the only reddening applied).
+    let av = dust_av(dust_texture, dust_sampler, dust, view.world_position, out.center);
+    out.nebula = vec4<f32>(v.nebula.rgb * dust_transmission(dust, av), v.nebula.a);
     return out;
 }
 

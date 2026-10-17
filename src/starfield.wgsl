@@ -4,6 +4,7 @@
 
 #import bevy_pbr::mesh_functions::get_world_from_local
 #import bevy_pbr::mesh_view_bindings::view
+#import ip::dust::{DustParams, dust_av, dust_transmission}
 
 struct StarfieldParams {
     // 2^EV
@@ -24,12 +25,19 @@ struct StarfieldParams {
 };
 
 @group(2) @binding(0) var<uniform> params: StarfieldParams;
+@group(2) @binding(1) var dust_texture: texture_3d<f32>;
+@group(2) @binding(2) var dust_sampler: sampler;
+@group(2) @binding(3) var<uniform> dust: DustParams;
+
+// Below this the star is invisible anyway; dust only dims, so skip its line-of-sight march.
+const DUST_MIN_BRIGHTNESS: f32 = 1e-4;
 
 struct Vertex {
     @builtin(instance_index) instance_index: u32,
     // Star position relative to its chunk, AU.
     @location(0) position: vec3<f32>,
-    // xy: billboard corner (-1..1); z: visual luminosity (solar); w: unused.
+    // xy: billboard corner (-1..1); z: intrinsic visual luminosity (solar, de-reddened);
+    // w: 1 if dust doesn't apply (no measured distance).
     @location(1) star: vec4<f32>,
     // Linear RGB spectral tint.
     @location(2) color: vec4<f32>,
@@ -65,7 +73,12 @@ fn vertex(v: Vertex) -> VertexOutput {
     var out: VertexOutput;
     out.clip_position = view.clip_from_view * vec4<f32>(view_pos + offset, 1.0);
     out.corner = v.star.xy;
-    out.color = v.color.rgb * brightness;
+    var color = v.color.rgb * brightness;
+    if brightness > DUST_MIN_BRIGHTNESS && v.star.w < 0.5 {
+        let av = dust_av(dust_texture, dust_sampler, dust, view.world_position, world);
+        color *= dust_transmission(dust, av);
+    }
+    out.color = color;
     return out;
 }
 

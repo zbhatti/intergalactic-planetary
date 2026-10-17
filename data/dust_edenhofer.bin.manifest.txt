@@ -1,0 +1,8 @@
+IP 3D dust grid derived from Edenhofer et al. (2024, A&A 685, A82) 3D dust map
+Source: https://zenodo.org/records/10658339 mean_and_std_xyz.fits (MEAN), CC BY 4.0
+Source planes: z index 427..822 (z = -396 .. 394 pc)
+Source sha256 (concatenated planes): 38f9321130ec0106715caa78a1ed7660d91f344965bab75ed60281a7c14f6929
+Grid: 208 x 208 x 66 voxels of 12 pc (Galactic X toward the Galactic centre, Z north)
+Units: A_V per pc = 2.8 x E(ZGR23), log-encoded u8 over 1e-6 .. 1e0
+Max A_V/pc: 0.06882; voxels with dust: 75.4%
+Built by: python3 -I tools/build_dust.py <planes_dir> data/dust_edenhofer.bin (see the script for the download)

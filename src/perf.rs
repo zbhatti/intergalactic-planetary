@@ -174,6 +174,7 @@ pub fn bench_key(name: &str) -> Option<KeyCode> {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn bench_setup(
     mut bg: ResMut<ShowCatalogStars>,
     mut labels: ResMut<LabelSettings>,
@@ -181,6 +182,7 @@ pub fn bench_setup(
     mut fov: ResMut<CameraFov>,
     mut sky: ResMut<SkySettings>,
     mut exposure: ResMut<ExposureSettings>,
+    mut dust: ResMut<crate::dust::DustSettings>,
     mut keys: EventWriter<KeyboardInput>,
 ) {
     // `IP_BENCH_EV=<n>`: a fixed "long exposure" (auto-exposure off), e.g. to see nebulae.
@@ -190,6 +192,10 @@ pub fn bench_setup(
     {
         exposure.ev = ev;
         exposure.auto = false;
+    }
+    // `IP_BENCH_DUST=0`: no interstellar dust (compare screenshots with and without).
+    if std::env::var("IP_BENCH_DUST").is_ok_and(|v| v == "0") {
+        dust.enabled = false;
     }
     // `IP_BENCH_FOV=<degrees>`: zoomed-in screenshots.
     if let Some(deg) = std::env::var("IP_BENCH_FOV")

@@ -63,7 +63,7 @@ data's reach) come with Phase 3.
 | # | Feature | IP today |
 |---|---|---|
 | 14b | ✅ **Catalogued nebulae** with colours from their visible spectra | 168 Sharpless H II regions (distances from Gaia parallaxes, OB stars, WISE) + 52 van den Bergh reflection nebulae at their stars; CIE colours from emission lines / scattered starlight, checked against van den Bergh's observed plate colours |
-| 14c | **3D dust: extinction and reddening** from the camera, Edenhofer et al. 2023 map (CC BY 4.0, 1.25 kpc) | Next |
+| 14c | ✅ **3D dust: extinction and reddening** from the camera, Edenhofer et al. 2024 map (CC BY 4.0, 1.25 kpc) | 12 pc grid (2.9 MB); catalog de-reddened at startup, A_V from the camera applied on GPU (stars, nebulae) and CPU (labels, browser, picking, auto-exposure); CCM89 reddening |
 | 14d | **Visible dust**: dark clouds against nebulae and stars; per-region nebula line ratios where measured | Later |
 
 ## Phase 3 — Real content, large scale (Milky Way → Laniakea)

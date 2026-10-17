@@ -12,11 +12,12 @@
 //! brightness classes (approximate).
 
 use crate::constants::AU_PER_PC;
-use crate::coords::{BodyRadius, NavSet, NotASurface, WorldPos};
+use crate::coords::{BodyRadius, FloatingOrigin, NavSet, NotASurface, WorldPos};
+use crate::dust::{Dust, DustParams, DustSettings, DustTexture};
 use crate::hyg::HygCatalog;
 use crate::hyg_bodies::class_temperature;
 use crate::info::{BodyInfo, BodyKind, format_sig};
-use crate::labels::spawn_label;
+use crate::labels::{LabelMinDiskPx, spawn_label};
 use crate::search::ObjectCatalog;
 use crate::sky::SkyFrame;
 use crate::spectrum::{DUST_SCATTER_EXP, HII_LINES, lines_rgb, scattered_starlight_rgb};
@@ -270,6 +271,11 @@ mod params {
 pub struct NebulaMaterial {
     #[uniform(0)]
     pub params: NebulaParams,
+    #[texture(1, dimension = "3d")]
+    #[sampler(2)]
+    pub dust_texture: Option<Handle<Image>>,
+    #[uniform(3)]
+    pub dust: DustParams,
 }
 
 impl Material for NebulaMaterial {
@@ -347,6 +353,7 @@ pub struct NebulaBody;
 #[derive(Resource)]
 pub struct NebulaMaterialHandle(pub Handle<NebulaMaterial>);
 
+#[allow(clippy::too_many_arguments)]
 pub fn setup_nebulae(
     mut commands: Commands,
     catalog: Res<HygCatalog>,
@@ -355,7 +362,9 @@ pub fn setup_nebulae(
     mut objects: ResMut<ObjectCatalog>,
     mut meshes: Option<ResMut<Assets<Mesh>>>,
     mut materials: Option<ResMut<Assets<NebulaMaterial>>>,
+    dust: (Res<Dust>, Res<DustSettings>, Option<Res<DustTexture>>),
 ) {
+    let (dust, dust_settings, dust_texture) = dust;
     let records = parse_nebulae(NEBULAE_TSV).expect("embedded nebula data parses (tested)");
     let nebulae = build(records, &catalog);
     let material = materials.as_mut().map(|m| {
@@ -366,11 +375,16 @@ pub fn setup_nebulae(
                 _pad0: 0.0,
                 _pad1: 0.0,
             },
+            dust_texture: dust_texture.as_ref().map(|t| t.0.clone()),
+            dust: DustParams::new(&dust.0, DVec3::ZERO, dust_settings.enabled),
         })
     });
     for n in &nebulae {
         let mu = surface_brightness_mag(n.record.kind, n.record.class);
-        let s = surface_brightness_scale(mu) as f32;
+        // Catalog surface brightness is observed, i.e. already dimmed by the dust between the
+        // nebula and us: de-redden it, as for stars, so the shader's dust restores it from home.
+        let av_sun = dust.0.extinction_av(DVec3::ZERO, n.pos);
+        let s = (surface_brightness_scale(mu) * 10f64.powf(0.4 * av_sun)) as f32;
         let mut e = commands.spawn((
             NebulaBody,
             WorldPos(n.pos),
@@ -390,6 +404,10 @@ pub fn setup_nebulae(
                 MeshMaterial3d(material.clone()),
             ));
         }
+        // Only common names (M42, Merope's nebula...) are labelled from afar.
+        if n.record.alias.is_none() && !n.record.name.contains('(') {
+            e.insert(LabelMinDiskPx(40.0));
+        }
         let e = e.id();
         spawn_label(&mut commands, e, &n.record.name);
         objects.0.push((n.record.name.clone(), e));
@@ -403,14 +421,18 @@ pub fn setup_nebulae(
 }
 
 /// Keeps the shared uniform in step with exposure and zoom; writes only on change.
+#[allow(clippy::too_many_arguments)]
 pub fn sync_nebula_params(
     handle: Option<Res<NebulaMaterialHandle>>,
     exposure: Res<ExposureSettings>,
     fov: Res<CameraFov>,
+    origin: Res<FloatingOrigin>,
+    dust: Res<Dust>,
+    dust_settings: Res<DustSettings>,
     mut materials: ResMut<Assets<NebulaMaterial>>,
 ) {
     let Some(handle) = handle else { return };
-    let Some(current) = materials.get(&handle.0).map(|m| m.params) else {
+    let Some((current, current_dust)) = materials.get(&handle.0).map(|m| (m.params, m.dust)) else {
         return;
     };
     let wanted = NebulaParams {
@@ -418,10 +440,16 @@ pub fn sync_nebula_params(
         min_angle: min_star_angle(fov.0),
         ..current
     };
-    if wanted != current
+    let wanted_dust = if origin.is_changed() || dust_settings.is_changed() {
+        DustParams::new(&dust.0, origin.0, dust_settings.enabled)
+    } else {
+        current_dust
+    };
+    if (wanted != current || wanted_dust != current_dust)
         && let Some(m) = materials.get_mut(&handle.0)
     {
         m.params = wanted;
+        m.dust = wanted_dust;
     }
 }
 

@@ -17,6 +17,7 @@
 use crate::camera::FlyCam;
 use crate::constants::AU_PER_PC;
 use crate::coords::{BodyRadius, NavSet, NotASurface, WorldPos};
+use crate::dust::{Dust, DustSettings, av_between};
 use crate::info::{BodyInfo, BodyKind, disk_radius_px};
 use crate::menu::MenuOpen;
 use crate::search::Search;
@@ -26,6 +27,7 @@ use crate::zoom::CameraFov;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use std::collections::HashMap;
 
 pub const LABEL_FONT_SIZE: f32 = 13.0;
 /// Bevy's default font (Fira Mono) is monospaced: each glyph advances ~0.6 em.
@@ -232,7 +234,13 @@ type ObjectQuery<'a> = (
     Option<&'a LabelLum>,
     Option<&'a OrbitOf>,
     Has<NotASurface>,
+    Option<&'a LabelMinDiskPx>,
 );
+
+/// On an object whose label only shows once its disk is at least this big on screen (px radius):
+/// unnamed nebulae, so "Sh2-115" labels don't clutter the sky from afar.
+#[derive(Component, Clone, Copy)]
+pub struct LabelMinDiskPx(pub f32);
 
 #[allow(clippy::too_many_arguments)]
 pub fn update_labels(
@@ -245,7 +253,10 @@ pub fn update_labels(
     objects: Query<ObjectQuery, Without<FlyCam>>,
     mut labels: Query<(Entity, &LabelFor, &mut Node)>,
     blockers: Query<(&ComputedNode, &GlobalTransform, &InheritedVisibility), With<LabelBlocker>>,
+    dust: Option<Res<Dust>>,
+    dust_settings: Option<Res<DustSettings>>,
     mut cands: Local<Vec<Candidate>>,
+    mut av_cache: Local<(DVec3, HashMap<Entity, f32>)>,
 ) {
     let Ok((cam_pos, cam_t)) = cam.single() else {
         return;
@@ -257,11 +268,19 @@ pub fn update_labels(
     let project = |pos: DVec3| project_to_screen(pos - cam_pos.0, cam_t.rotation, fov.0, vp);
     let on_screen = |p: Vec2| p.x >= 0.0 && p.y >= 0.0 && p.x <= vp.x && p.y <= vp.y;
 
+    // Extinction depends only on where the camera is: reuse it until the camera moves 0.1 pc.
+    if av_cache.0.distance(cam_pos.0) > 0.1 * AU_PER_PC
+        || dust_settings.as_ref().is_some_and(|d| d.is_changed())
+    {
+        av_cache.0 = cam_pos.0;
+        av_cache.1.clear();
+    }
+
     cands.clear();
     if settings.enabled {
         let occluders: Vec<Occluder> = objects
             .iter()
-            .filter_map(|(e, pos, _, radius, _, _, fly_through)| {
+            .filter_map(|(e, pos, _, radius, _, _, fly_through, _)| {
                 // Nebulae glow; they don't hide what's behind them.
                 if fly_through {
                     return None;
@@ -279,7 +298,8 @@ pub fn update_labels(
             .collect();
 
         for (label, label_for, _) in &labels {
-            let Ok((e, pos, info, _, lum, orbit, _)) = objects.get(label_for.target) else {
+            let Ok((e, pos, info, radius, lum, orbit, _, min_disk)) = objects.get(label_for.target)
+            else {
                 continue;
             };
             let selected = search.target == Some(e);
@@ -290,8 +310,23 @@ pub fn update_labels(
                 continue;
             }
             let dist = pos.0.distance(cam_pos.0);
-            let mag = lum.map(|l| apparent_magnitude(l.0, dist));
+            let mut mag = lum.map(|l| apparent_magnitude(l.0, dist));
+            // Dust only dims, so the march is needed only for stars that pass without it.
+            if let (Some(m), Some(d), Some(s)) = (mag.as_mut(), &dust, &dust_settings)
+                && *m <= settings.star_mag_limit
+            {
+                *m += *av_cache
+                    .1
+                    .entry(e)
+                    .or_insert_with(|| av_between(d, s, cam_pos.0, pos.0) as f32);
+            }
             if !selected && mag.is_some_and(|m| m > settings.star_mag_limit) {
+                continue;
+            }
+            if !selected
+                && let (Some(min), Some(r)) = (min_disk, radius)
+                && disk_radius_px(r.0, dist, fov.0, vp.y) < min.0
+            {
                 continue;
             }
             let Some(anchor) = project(pos.0).filter(|&p| on_screen(p)) else {

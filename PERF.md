@@ -16,7 +16,7 @@ cargo test --release -- --ignored --nocapture perf_   # CPU micro-benchmarks for
   watch: `p95`/`max` creeping toward or past 16.7 ms, and `hitches` (frames > 1.5x median).
 - Bench mode turns on every label and the background stars (worst case), then loops a go-to tour
   (override with `IP_BENCH_TOUR=Saturn,Titan` to screenshot specific objects, or `IP_BENCH_LOOK=Betelgeuse`
-  to stay 1 AU from the Sun and just turn toward a target, for the sky as seen from home; `IP_BENCH_FOV=2` to zoom to a 2 deg field of view; `IP_BENCH_EV=8` to set the exposure; `IP_BENCH_KEYS=B,I`
+  to stay 1 AU from the Sun and just turn toward a target, for the sky as seen from home; `IP_BENCH_FOV=2` to zoom to a 2 deg field of view; `IP_BENCH_EV=8` to set the exposure (auto off); `IP_BENCH_DUST=0` to turn dust off; `IP_BENCH_KEYS=B,I`
   presses keys at startup to put UI panels in the screenshot)
   (Earth -> Jupiter -> Sirius -> Deneb -> Sun) that covers planetary to ~800 pc scales.
   Before Phase 1 (2026-10-16 baseline) it panned 360 degrees instead, so rows before and after
@@ -49,6 +49,9 @@ cargo test --release -- --ignored --nocapture perf_   # CPU micro-benchmarks for
 | 2026-10-17 | Phase 2.6: +9 asteroids, +5 comets; stripped release binary (109 -> 64 MB) | release | 1196 | 16.74 | 17.82 | 46.36 | 3 | 7000 |
 | 2026-10-17 | ISM 1: 220 nebulae (one draw each, ray-traced spheres) | release | 1200 | 16.68 | 17.69 | 38.53 | 4 | 7444 |
 | 2026-10-17 | ISM 1: tour into Orion and Lagoon nebulae at EV+9 (fill-rate worst case) | release | 721 | 16.67 | 17.73 | 19.81 | 0 | 7443 |
+| 2026-10-17 | ISM 2: 3D dust, per-star GPU march (dust on) | release | 1199 | 16.70 | 17.81 | 30.86 | 2 | 7446 |
+| 2026-10-17 | ISM 2: same, dust off (comparison) | release | 1201 | 16.67 | 17.83 | 32.12 | 1 | 7446 |
+| 2026-10-17 | ISM 2: toward Sagittarius at EV+8, dust on (most stars marched) | release | 601 | 16.67 | 17.64 | 26.64 | 1 | 7445 |
 
 ## Micro-benchmarks (`cargo test --release -- --ignored --nocapture perf_`)
 

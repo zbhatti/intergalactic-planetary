@@ -3,12 +3,13 @@
 use crate::camera::{CursorLocked, FlyCam};
 use crate::constants::{AU_PER_LY, AU_PER_PC, KM_PER_AU};
 use crate::coords::{BodyRadius, NavSet, NotASurface, WorldPos, view_transform};
+use crate::dust::{Dust, DustSettings, av_between, transmission};
 use crate::hyg::HygCatalog;
 use crate::hyg_bodies::HygEntities;
 use crate::menu::MenuOpen;
 use crate::search::Search;
 use crate::starfield::StarPoints;
-use crate::stars::{ExposureSettings, star_brightness};
+use crate::stars::{ExposureSettings, luminance, star_brightness};
 use crate::ui::format_distance;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -263,8 +264,10 @@ pub fn select_on_click(
         ResMut<HygEntities>,
         Res<ExposureSettings>,
     ),
+    dust: (Option<Res<Dust>>, Option<Res<DustSettings>>),
 ) {
     let (catalog, points, mut hyg_entities, exposure) = stars;
+    let (dust, dust_settings) = dust;
     if !buttons.just_pressed(MouseButton::Left) || !locked.0 || menu_open.0 || search.active {
         return;
     }
@@ -307,6 +310,16 @@ pub fn select_on_click(
                 return None;
             }
             let screen = camera.world_to_viewport(&view, rel.as_vec3()).ok()?;
+            // Hidden by dust? Only checked near the crosshair: the march is the costly part.
+            if screen.distance(vp * 0.5) <= PICK_RADIUS_PX
+                && let (Some(d), Some(set)) = (&dust, &dust_settings)
+                && catalog.stars[i].dist_known
+            {
+                let t = luminance(transmission(av_between(d, set, cam_pos.0, *p)));
+                if star_brightness(ev, lum, (dist / AU_PER_PC) as f32) * t < MIN_PICK_BRIGHTNESS {
+                    return None;
+                }
+            }
             Some(ScreenHit {
                 id: PickTarget::CatalogStar(i),
                 screen,

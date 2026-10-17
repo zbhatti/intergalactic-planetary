@@ -11,10 +11,11 @@
 
 use crate::camera::FlyCam;
 use crate::coords::{NavSet, WorldPos};
+use crate::dust::{Dust, DustSettings, av_between, transmission};
 use crate::hyg::HygCatalog;
 use crate::starfield::StarPoints;
 use crate::stars::{
-    ExposureSettings, SOLAR_RADIUS_UNITS, Star, sphere_brightness_raw as raw_brightness,
+    ExposureSettings, SOLAR_RADIUS_UNITS, Star, luminance, sphere_brightness_raw as raw_brightness,
 };
 use crate::zoom::{CameraFov, min_star_angle};
 use bevy::math::DVec3;
@@ -71,6 +72,8 @@ pub fn auto_exposure(
     points: Option<Res<StarPoints>>,
     catalog: Option<Res<HygCatalog>>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    dust: Option<Res<Dust>>,
+    dust_settings: Option<Res<DustSettings>>,
 ) {
     if !exposure.auto {
         return;
@@ -97,13 +100,9 @@ pub fn auto_exposure(
         let rel = pos.0 - cam_pos.0;
         let radius = star.radius_solar as f64 * SOLAR_RADIUS_UNITS;
         if in_view(rel, radius) {
-            peak = peak.max(raw_brightness(
-                manual,
-                star.visual_lum,
-                radius,
-                rel.length(),
-                min_angle,
-            ));
+            let dimmed = raw_brightness(manual, star.visual_lum, radius, rel.length(), min_angle)
+                * luminance(star.dust);
+            peak = peak.max(dimmed);
         }
     }
     if let (Some(points), Some(catalog)) = (points, catalog)
@@ -112,7 +111,13 @@ pub fn auto_exposure(
         let s = &catalog.stars[i];
         let rel = s.pos - cam_pos.0;
         if in_view(rel, 0.0) {
-            peak = peak.max(raw_brightness(manual, s.lum, 0.0, rel.length(), min_angle));
+            let av = match (&dust, &dust_settings) {
+                (Some(d), Some(set)) if s.dist_known => av_between(d, set, cam_pos.0, s.pos),
+                _ => 0.0,
+            };
+            let dimmed = raw_brightness(manual, s.lum, 0.0, rel.length(), min_angle)
+                * luminance(transmission(av));
+            peak = peak.max(dimmed);
         }
     }
 
@@ -180,15 +185,8 @@ mod tests {
         app.init_resource::<ExposureSettings>()
             .init_resource::<CameraFov>()
             .add_systems(Update, auto_exposure);
-        app.world_mut().spawn((
-            WorldPos(DVec3::ZERO),
-            Star {
-                spectral: 'G',
-                radius_solar: 1.0,
-                visual_lum: 1.0,
-                last_brightness: 0.0,
-            },
-        ));
+        app.world_mut()
+            .spawn((WorldPos(DVec3::ZERO), Star::new('G', 1.0, 1.0)));
         // At 1 AU on +Z, looking at the Sun (Bevy cameras look down -Z).
         let cam = app
             .world_mut()

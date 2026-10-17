@@ -314,15 +314,7 @@ pub fn setup_solar_system(
     // drives auto-exposure); update_star_brightness sizes it, so it doesn't need MinAngularSize.
     sp.commands
         .entity(sun)
-        .insert((
-            LabelLum(1.0),
-            Star {
-                spectral: 'G',
-                radius_solar: 1.0,
-                visual_lum: 1.0,
-                last_brightness: 0.0,
-            },
-        ))
+        .insert((LabelLum(1.0), Star::new('G', 1.0, 1.0)))
         .remove::<MinAngularSize>();
     spawned.push(("Sun", DVec3::ZERO, sun));
 
