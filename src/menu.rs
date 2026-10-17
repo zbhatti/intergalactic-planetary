@@ -1,4 +1,5 @@
 use crate::camera::CursorLocked;
+use crate::dust::DustSettings;
 use crate::labels::LabelSettings;
 use crate::nebulae::ShowNebulae;
 use crate::search::Search;
@@ -12,7 +13,7 @@ pub struct MenuOpen(pub bool);
 pub const CATALOG_STARS_LABEL: &str = "Catalog stars (HYG)";
 
 /// Attribution required by the CC BY-SA 4.0 licenses of the embedded star and constellation data.
-pub const DATA_CREDIT: &str = "Star data: HYG Database v4.4 (c) astronexus.com, CC BY-SA 4.0\nConstellation figures: Stellarium (modern sky culture), CC BY-SA 4.0\nExoplanets: NASA Exoplanet Archive (Caltech, under contract with NASA)\nNebulae: Sharpless, van den Bergh, Mendez-Delgado+ 2022 et al. via VizieR (CDS)\nOrbits: NASA/JPL Solar System Dynamics";
+pub const DATA_CREDIT: &str = "Star data: HYG Database v4.4 (c) astronexus.com, CC BY-SA 4.0\nConstellation figures: Stellarium (modern sky culture), CC BY-SA 4.0\nExoplanets: NASA Exoplanet Archive (Caltech, under contract with NASA)\nNebulae: Sharpless, van den Bergh, Mendez-Delgado+ 2022 et al. via VizieR (CDS)\n3D dust: Edenhofer et al. 2024 (CC BY 4.0)\nOrbits: NASA/JPL Solar System Dynamics";
 
 /// Whether the HYG catalog starfield (~109k real stars) is rendered. On by default.
 #[derive(Resource)]
@@ -45,6 +46,7 @@ pub enum MenuItem {
     EclipticGrid,
     GalacticGrid,
     AutoExposure,
+    Dust,
     Quit,
 }
 
@@ -55,10 +57,11 @@ pub struct MenuSettings<'a> {
     pub sky: &'a mut SkySettings,
     pub exposure: &'a mut ExposureSettings,
     pub nebulae: &'a mut ShowNebulae,
+    pub dust: &'a mut DustSettings,
 }
 
 impl MenuItem {
-    pub const TOGGLES: [MenuItem; 14] = [
+    pub const TOGGLES: [MenuItem; 15] = [
         MenuItem::CatalogStars,
         MenuItem::Nebulae,
         MenuItem::Labels,
@@ -73,6 +76,7 @@ impl MenuItem {
         MenuItem::EclipticGrid,
         MenuItem::GalacticGrid,
         MenuItem::AutoExposure,
+        MenuItem::Dust,
     ];
 
     pub fn text(
@@ -82,6 +86,7 @@ impl MenuItem {
         sky: &SkySettings,
         exposure: &ExposureSettings,
         nebulae: &ShowNebulae,
+        dust: &DustSettings,
     ) -> String {
         match self {
             MenuItem::CatalogStars => checkbox_text(CATALOG_STARS_LABEL, stars.0),
@@ -102,6 +107,7 @@ impl MenuItem {
             MenuItem::EclipticGrid => checkbox_text("Ecliptic grid", sky.ecliptic_grid),
             MenuItem::GalacticGrid => checkbox_text("Galactic grid", sky.galactic_grid),
             MenuItem::AutoExposure => checkbox_text("Auto exposure (\\)", exposure.auto),
+            MenuItem::Dust => checkbox_text("Interstellar dust (dims, reddens)", dust.enabled),
             MenuItem::Quit => "Quit".to_string(),
         }
     }
@@ -113,6 +119,7 @@ impl MenuItem {
             sky,
             exposure,
             nebulae,
+            dust,
         } = s;
         match self {
             MenuItem::CatalogStars => stars.0 = !stars.0,
@@ -129,6 +136,7 @@ impl MenuItem {
             MenuItem::EclipticGrid => sky.ecliptic_grid = !sky.ecliptic_grid,
             MenuItem::GalacticGrid => sky.galactic_grid = !sky.galactic_grid,
             MenuItem::AutoExposure => exposure.auto = !exposure.auto,
+            MenuItem::Dust => dust.enabled = !dust.enabled,
             MenuItem::Quit => {}
         }
     }
@@ -263,12 +271,14 @@ pub fn update_pause_menu_visibility(
 }
 
 /// Rewrites the menu texts when a setting changes (and once at startup).
+#[allow(clippy::too_many_arguments)]
 pub fn sync_menu_text(
     stars: Res<ShowCatalogStars>,
     labels: Res<LabelSettings>,
     sky: Res<SkySettings>,
     exposure: Res<ExposureSettings>,
     nebulae: Res<ShowNebulae>,
+    dust: Res<DustSettings>,
     mut texts: Query<(&MenuItemText, &mut Text)>,
     mut last_auto: Local<Option<bool>>,
 ) {
@@ -280,11 +290,14 @@ pub fn sync_menu_text(
         && !sky.is_changed()
         && !exposure_toggled
         && !nebulae.is_changed()
+        && !dust.is_changed()
     {
         return;
     }
     for (item, mut text) in &mut texts {
-        let wanted = item.0.text(&stars, &labels, &sky, &exposure, &nebulae);
+        let wanted = item
+            .0
+            .text(&stars, &labels, &sky, &exposure, &nebulae, &dust);
         if text.0 != wanted {
             text.0 = wanted;
         }
@@ -299,6 +312,7 @@ pub fn handle_menu_buttons(
     mut sky: ResMut<SkySettings>,
     mut exposure: ResMut<ExposureSettings>,
     mut nebulae: ResMut<ShowNebulae>,
+    mut dust: ResMut<DustSettings>,
     mut exit: EventWriter<AppExit>,
     menu_open: Res<MenuOpen>,
 ) {
@@ -318,6 +332,7 @@ pub fn handle_menu_buttons(
                     sky: &mut sky,
                     exposure: &mut exposure,
                     nebulae: &mut nebulae,
+                    dust: &mut dust,
                 });
             }
             Interaction::Hovered => {
@@ -354,8 +369,9 @@ mod tests {
         let mut sky = SkySettings::default();
         let mut exposure = ExposureSettings::default();
         let mut nebulae = ShowNebulae::default();
+        let mut dust = DustSettings::default();
         assert_eq!(
-            MenuItem::MoonLabels.text(&stars, &labels, &sky, &exposure, &nebulae),
+            MenuItem::MoonLabels.text(&stars, &labels, &sky, &exposure, &nebulae, &dust),
             "[x]   Moon labels"
         );
         MenuItem::MoonLabels.apply(MenuSettings {
@@ -364,10 +380,11 @@ mod tests {
             sky: &mut sky,
             exposure: &mut exposure,
             nebulae: &mut nebulae,
+            dust: &mut dust,
         });
         assert!(!labels.moons);
         assert_eq!(
-            MenuItem::MoonLabels.text(&stars, &labels, &sky, &exposure, &nebulae),
+            MenuItem::MoonLabels.text(&stars, &labels, &sky, &exposure, &nebulae, &dust),
             "[ ]   Moon labels"
         );
         MenuItem::CatalogStars.apply(MenuSettings {
@@ -376,6 +393,7 @@ mod tests {
             sky: &mut sky,
             exposure: &mut exposure,
             nebulae: &mut nebulae,
+            dust: &mut dust,
         });
         MenuItem::GalacticGrid.apply(MenuSettings {
             stars: &mut stars,
@@ -383,12 +401,13 @@ mod tests {
             sky: &mut sky,
             exposure: &mut exposure,
             nebulae: &mut nebulae,
+            dust: &mut dust,
         });
         assert!(sky.galactic_grid);
         assert!(!stars.0);
         for item in MenuItem::TOGGLES {
             assert!(
-                item.text(&stars, &labels, &sky, &exposure, &nebulae)
+                item.text(&stars, &labels, &sky, &exposure, &nebulae, &dust)
                     .is_ascii()
             );
         }
@@ -403,6 +422,7 @@ mod tests {
             .init_resource::<SkySettings>()
             .init_resource::<ExposureSettings>()
             .init_resource::<ShowNebulae>()
+            .init_resource::<DustSettings>()
             .add_systems(Update, sync_menu_text);
         let text = app
             .world_mut()

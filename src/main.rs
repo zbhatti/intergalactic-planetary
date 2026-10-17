@@ -6,6 +6,7 @@ mod browser;
 mod camera;
 mod constants;
 mod coords;
+mod dust;
 mod exoplanets;
 mod goto;
 mod gpu_compat;
@@ -36,6 +37,10 @@ fn main() {
     // Exoplanet hosts HYG doesn't list are appended to the star catalog before anything reads it.
     let mut hyg = hyg::HygCatalog::embedded();
     let exo = exoplanets::load(&mut hyg);
+    // Catalog brightnesses are observed (already dimmed by dust): de-redden them once, so the
+    // dust between the camera and each star can be applied at runtime (see dust.rs).
+    let dust = dust::DustGrid::embedded();
+    dust::deredden_catalog(&mut hyg, &dust);
     App::new()
         .add_plugins(
             DefaultPlugins
@@ -56,9 +61,13 @@ fn main() {
             goto::GoToPlugin,
             info::InfoPlugin,
             browser::BrowserPlugin,
+            dust::DustPlugin,
             starfield::StarfieldPlugin,
             hyg_bodies::HygBodiesPlugin,
             perf::PerfPlugin,
+        ))
+        // Bevy's plugin tuples hold at most 15.
+        .add_plugins((
             zoom::ZoomPlugin,
             labels::LabelsPlugin,
             sky::SkyPlugin,
@@ -85,6 +94,7 @@ fn main() {
         .insert_resource(menu::ShowCatalogStars::default())
         .insert_resource(hyg)
         .insert_resource(exo)
+        .insert_resource(dust::Dust(dust))
         .add_systems(
             Startup,
             (

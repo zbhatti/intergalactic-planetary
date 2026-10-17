@@ -5,6 +5,7 @@
 use crate::browser::{Browser, BrowserActivate, BuildRows, PanelKind, Row, RowAction, StarSort};
 use crate::camera::FlyCam;
 use crate::coords::WorldPos;
+use crate::dust::{Dust, DustSettings, av_between};
 use crate::hyg::HygCatalog;
 use crate::hyg_bodies::{HygEntities, promote, star_name};
 use crate::labels::apparent_magnitude;
@@ -27,7 +28,14 @@ pub struct Listed {
 
 /// The `n` nearest or brightest stars seen from `from`, best first. The Sun (visual
 /// luminosity 1 at the origin) is included.
-pub fn list_stars(catalog: &HygCatalog, from: DVec3, sort: StarSort, n: usize) -> Vec<Listed> {
+/// `av(i)` is the dust extinction (V mag) from `from` to catalog star `i`.
+pub fn list_stars(
+    catalog: &HygCatalog,
+    from: DVec3,
+    sort: StarSort,
+    n: usize,
+    av: impl Fn(usize) -> f64,
+) -> Vec<Listed> {
     let sun_dist = from.length();
     let mut all: Vec<Listed> = catalog
         .stars
@@ -55,10 +63,22 @@ pub fn list_stars(catalog: &HygCatalog, from: DVec3, sort: StarSort, n: usize) -
     if n == 0 {
         return Vec::new();
     }
+    // Dust only dims, so the brightest after dust are among the brightest before it; take a
+    // generous candidate set, add each one's extinction, then rank.
+    let candidates = match sort {
+        StarSort::Nearest => n,
+        StarSort::Brightest => (n * 4).min(all.len()),
+    };
     // Partial selection first: sorting all ~110k would cost several times more.
-    all.select_nth_unstable_by(n - 1, |a, b| key(a).total_cmp(&key(b)));
-    all.truncate(n);
+    all.select_nth_unstable_by(candidates - 1, |a, b| key(a).total_cmp(&key(b)));
+    all.truncate(candidates);
+    for l in &mut all {
+        if let Some(i) = l.index {
+            l.mag += av(i) as f32;
+        }
+    }
     all.sort_by(|a, b| key(a).total_cmp(&key(b)));
+    all.truncate(n);
     all
 }
 
@@ -85,6 +105,8 @@ pub fn build_star_rows(
     mut browser: ResMut<Browser>,
     catalog: Res<HygCatalog>,
     cam: Query<&WorldPos, With<FlyCam>>,
+    dust: Option<Res<Dust>>,
+    dust_settings: Option<Res<DustSettings>>,
 ) {
     let Some(PanelKind::Stars(sort)) = browser.open else {
         return;
@@ -93,7 +115,13 @@ pub fn build_star_rows(
         return;
     }
     let Ok(cam) = cam.single() else { return };
-    let rows = list_stars(&catalog, cam.0, sort, STAR_ROWS)
+    let av = |i: usize| match (&dust, &dust_settings) {
+        (Some(d), Some(set)) if catalog.stars[i].dist_known => {
+            av_between(d, set, cam.0, catalog.stars[i].pos)
+        }
+        _ => 0.0,
+    };
+    let rows = list_stars(&catalog, cam.0, sort, STAR_ROWS, av)
         .into_iter()
         .map(|l| match l.index {
             Some(i) => Row {
@@ -157,7 +185,13 @@ mod tests {
     #[test]
     fn test_nearest_stars_from_home() {
         let cat = HygCatalog::embedded();
-        let list = list_stars(&cat, DVec3::new(1.0, 0.0, 0.0), StarSort::Nearest, 5);
+        let list = list_stars(
+            &cat,
+            DVec3::new(1.0, 0.0, 0.0),
+            StarSort::Nearest,
+            5,
+            |_| 0.0,
+        );
         assert_eq!(list[0].index, None, "the Sun first");
         let names: Vec<String> = list[1..]
             .iter()
@@ -173,7 +207,13 @@ mod tests {
     fn test_brightest_stars_from_home() {
         let cat = HygCatalog::embedded();
         // From 10 AU out of the plane the Sun is still by far the brightest.
-        let list = list_stars(&cat, DVec3::new(0.0, 10.0, 0.0), StarSort::Brightest, 3);
+        let list = list_stars(
+            &cat,
+            DVec3::new(0.0, 10.0, 0.0),
+            StarSort::Brightest,
+            3,
+            |_| 0.0,
+        );
         assert_eq!(list[0].index, None);
         assert_eq!(display_name(&cat, list[1].index.unwrap()), "Sirius");
         assert!(list.windows(2).all(|w| w[0].mag <= w[1].mag));
@@ -184,7 +224,7 @@ mod tests {
         let cat = HygCatalog::embedded();
         let sirius = cat.index_of_name("Sirius").unwrap();
         let from = cat.stars[sirius].pos + DVec3::new(0.0, 1.0, 0.0);
-        let list = list_stars(&cat, from, StarSort::Nearest, 3);
+        let list = list_stars(&cat, from, StarSort::Nearest, 3, |_| 0.0);
         // Sirius first (its companion, Sirius B, is listed separately in HYG).
         assert_eq!(list[0].index, Some(sirius));
         // The Sun is 2.64 pc away: not among the three nearest.

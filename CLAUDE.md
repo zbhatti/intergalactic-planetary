@@ -96,6 +96,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `exoplanets.rs` | NASA Exoplanet Archive systems: hosts matched to HYG by HIP or appended to `HygCatalog` (`hyg_id == 0`) in `main` before anything reads it; host entities (searchable, no labels); planets spawned only near their star |
 | `spectrum.rs` | Visible spectrum -> colour: CIE 1931 matching functions (analytic fit) -> linear sRGB; H II emission lines; dust-scattered starlight |
 | `nebulae.rs` + `nebula.wgsl` | 168 Sharpless H II regions + 52 van den Bergh reflection nebulae; emissive spheres ray-traced in a cube (back faces only), surface brightness on the star scale; `NotASurface` so flying through doesn't stall speed |
+| `dust.rs` + `dust.wgsl` | Edenhofer+ 2024 3D dust grid: CPU line integral (the reference), `deredden_catalog` at startup, 3D texture + matching WGSL march (`ip::dust` import) used by the starfield and nebula shaders; CCM89 per-channel reddening |
 | `ui.rs` | Distance/speed/exposure HUD labels, `format_distance`, `format_speed` |
 | `navigation.rs` | HUD reticle, off-screen arrow gizmo, camera auto-orient |
 | `menu.rs` | Esc pause menu: data-driven `MenuItem` toggles whose text is regenerated from the settings |
@@ -259,6 +260,18 @@ reddening into the colour would count the dust twice. Brightness is surface brig
 star scale, so nebulae are faint at EV 0, as to the eye; auto-exposure keeps them faint while a
 bright star is in view. Turn auto off (`\`) and raise EV to see them like a long exposure.
 
+### 17. Dust: de-redden once, apply from the camera, and keep CPU and GPU identical
+
+Observed magnitudes (HYG, exoplanet hosts) and catalog surface brightnesses are already dimmed by
+dust. `main` de-reddens the catalog once (`dust::deredden_catalog`, A_V from the Sun) and every
+renderer applies A_V from the *camera*, so from home they cancel and the sky looks as observed. That
+only holds if every path integrates the same way: `DustGrid::extinction_av` is the reference and
+`dust.wgsl` mirrors it (texel-centre trilinear on the encoded byte, then decode; same step rule).
+CPU users: sphere stars, label magnitudes (cached per 0.1 pc of camera motion), star browser,
+picking, auto-exposure. Stars with no measured distance (`dist_known == false`) get no dust.
+`HygCatalog::apparent_magnitude` is now intrinsic; use `apparent_magnitude_from_sun` for the
+observed value. WGSL in an imported module (naga_oil) can't use identifiers ending in a digit.
+
 ### 10. Benchmarks need an awake display
 
 With the screen blanked, GNOME throttles presentation to a constant 250 ms per frame. Run `bash ~/bin/wake-screen.sh`
@@ -273,7 +286,7 @@ emissive = 2^(EV + auto) × 0.4 × visual_luminosity_solar / dist_pc²        (u
 
 - `BRIGHTNESS_SCALE = 0.4`; Sirius from Earth is ~1.4 at EV 0, under auto-exposure's target of 2.
 - Spectral color (from `spectral_color`) is applied as a tint multiplied by brightness.
-- Distance is clamped to a minimum of 1e-4 pc, and the result is capped at `MAX_STAR_BRIGHTNESS` (see gotcha 9).
+- Points clamp distance at 1e-6 pc (resolved spheres need no clamp), the result is capped at `MAX_STAR_BRIGHTNESS` (see gotcha 9), and dust from the camera multiplies it per channel (gotcha 17).
 - Exposure range: EV -5 (dim) to EV +20 (very sensitive). Each step doubles/halves all star brightness.
 
 ## Adding new catalog stars

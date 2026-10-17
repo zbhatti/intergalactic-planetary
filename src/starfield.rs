@@ -4,7 +4,9 @@
 
 use crate::camera::FlyCam;
 use crate::constants::AU_PER_PC;
+use crate::coords::FloatingOrigin;
 use crate::coords::{NavSet, Nearest, WorldPos};
+use crate::dust::{Dust, DustParams, DustSettings, DustTexture};
 use crate::hyg::{HygCatalog, HygStar};
 use crate::menu::ShowCatalogStars;
 use crate::stars::{
@@ -83,6 +85,11 @@ impl StarfieldParams {
 pub struct StarfieldMaterial {
     #[uniform(0)]
     pub params: StarfieldParams,
+    #[texture(1, dimension = "3d")]
+    #[sampler(2)]
+    pub dust_texture: Option<Handle<Image>>,
+    #[uniform(3)]
+    pub dust: DustParams,
 }
 
 impl Material for StarfieldMaterial {
@@ -170,9 +177,11 @@ pub fn chunk_mesh(stars: &[HygStar], members: &[usize], center: DVec3) -> Mesh {
         let s = &stars[i];
         let local = (s.pos - center).as_vec3().to_array();
         let tint = spectral_color(s.class).to_f32_array();
+        // w = 1: no dust for this star (its distance is a placeholder, see HygStar::dist_known).
+        let no_dust = if s.dist_known { 0.0 } else { 1.0 };
         for c in CORNERS {
             positions.push(local);
-            star_attr.push([c[0], c[1], s.lum, 0.0]);
+            star_attr.push([c[0], c[1], s.lum, no_dust]);
             colors.push(tint);
         }
         let base = (k * 4) as u32;
@@ -188,11 +197,15 @@ pub fn chunk_mesh(stars: &[HygStar], members: &[usize], center: DVec3) -> Mesh {
     .with_inserted_indices(Indices::U32(indices))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn setup_starfield(
     mut commands: Commands,
     catalog: Res<HygCatalog>,
     curated: Res<CuratedHygMatches>,
     exposure: Res<ExposureSettings>,
+    dust: Res<Dust>,
+    dust_settings: Res<DustSettings>,
+    dust_texture: Option<Res<DustTexture>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StarfieldMaterial>>,
     mut points: ResMut<StarPoints>,
@@ -201,6 +214,8 @@ pub fn setup_starfield(
     let chunk_au = CHUNK_PC * AU_PER_PC;
     let material = materials.add(StarfieldMaterial {
         params: StarfieldParams::new(exposure.factor()),
+        dust_texture: dust_texture.map(|t| t.0.clone()),
+        dust: DustParams::new(&dust.0, DVec3::ZERO, dust_settings.enabled),
     });
     let chunks = chunk_stars(&catalog.stars, &skip, chunk_au);
     commands.insert_resource(StarfieldMaterialHandle(material.clone()));
@@ -231,15 +246,19 @@ pub fn setup_starfield(
 
 /// Keeps the shared uniform in step with exposure, zoom and the hidden proxy star. Writes (and
 /// so re-uploads) the material only when a value actually changed.
+#[allow(clippy::too_many_arguments)]
 pub fn sync_starfield_params(
     handle: Option<Res<StarfieldMaterialHandle>>,
     exposure: Res<ExposureSettings>,
     fov: Res<CameraFov>,
     hide: Res<StarfieldHide>,
+    origin: Res<FloatingOrigin>,
+    dust: Res<Dust>,
+    dust_settings: Res<DustSettings>,
     mut materials: ResMut<Assets<StarfieldMaterial>>,
 ) {
     let Some(handle) = handle else { return };
-    let Some(current) = materials.get(&handle.0).map(|m| m.params) else {
+    let Some((current, current_dust)) = materials.get(&handle.0).map(|m| (m.params, m.dust)) else {
         return;
     };
     let wanted = StarfieldParams {
@@ -248,10 +267,17 @@ pub fn sync_starfield_params(
         hide: hide.0,
         ..current
     };
-    if wanted != current
+    // The dust mapping depends on the floating origin; only rebuild it when that moved.
+    let wanted_dust = if origin.is_changed() || dust_settings.is_changed() {
+        DustParams::new(&dust.0, origin.0, dust_settings.enabled)
+    } else {
+        current_dust
+    };
+    if (wanted != current || wanted_dust != current_dust)
         && let Some(mat) = materials.get_mut(&handle.0)
     {
         mat.params = wanted;
+        mat.dust = wanted_dust;
     }
 }
 
@@ -386,12 +412,18 @@ mod tests {
             .init_resource::<ExposureSettings>()
             .init_resource::<CameraFov>()
             .init_resource::<StarfieldHide>()
+            .init_resource::<FloatingOrigin>()
+            .init_resource::<DustSettings>()
+            .insert_resource(Dust(crate::dust::DustGrid::embedded()))
             .add_systems(Update, sync_starfield_params);
+        let dust = DustParams::new(&crate::dust::DustGrid::embedded(), DVec3::ZERO, true);
         let handle = app
             .world_mut()
             .resource_mut::<Assets<StarfieldMaterial>>()
             .add(StarfieldMaterial {
                 params: StarfieldParams::new(1.0),
+                dust_texture: None,
+                dust,
             });
         app.insert_resource(StarfieldMaterialHandle(handle.clone()));
         app.world_mut().resource_mut::<ExposureSettings>().ev = 3;
@@ -405,6 +437,16 @@ mod tests {
             .unwrap()
             .params;
         assert_eq!(params.exposure, 8.0);
+        // The dust mapping follows the floating origin.
+        app.world_mut().resource_mut::<FloatingOrigin>().0 = DVec3::new(1e7, 0.0, 0.0);
+        app.update();
+        let moved = app
+            .world()
+            .resource::<Assets<StarfieldMaterial>>()
+            .get(&handle)
+            .unwrap()
+            .dust;
+        assert_ne!(moved.offset, dust.offset);
         assert_eq!(params.min_angle, min_star_angle(0.01));
         assert_eq!(params.hide.w, 50.0);
     }

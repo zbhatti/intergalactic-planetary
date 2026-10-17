@@ -22,6 +22,9 @@ supercluster).
   coloured from their visible spectra (emission lines, or starlight scattered by dust) the way an
   eye would see them. Faint at normal exposure, as in reality: turn auto-exposure off (`\`) and
   raise the exposure (`]`) for a long-exposure view, or fly into one.
+- **Interstellar dust** from a real 3D dust map (Edenhofer et al. 2024, 1.25 kpc around the Sun):
+  stars and nebulae behind dust are dimmed and reddened as seen from wherever you are. From Earth
+  the sky looks as observed; fly past a cloud and what's behind it changes. Toggle in the Esc menu.
 - **Info panel** (type, radius, mass, temperature, luminosity, distance), **solar system browser**,
   **star browser** (nearest or brightest from wherever you are), **search**, and **saved locations**
   that persist between runs.
@@ -87,4 +90,4 @@ and results.
 
 ## Data
 
-Star positions come from the [HYG Database](https://codeberg.org/astronexus/hyg) v4.4 (c) astronexus.com, CC BY-SA 4.0. Constellation figures come from [Stellarium](https://github.com/Stellarium/stellarium)'s modern sky culture, CC BY-SA 4.0. Nebulae come from the Sharpless and van den Bergh catalogs, with distances from Mendez-Delgado et al. (2022), Foster & Brunt (2015) and Anderson et al. (2014), via [VizieR](https://vizier.cds.unistra.fr/) (CDS, Strasbourg). This project has made use of the [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/), which is operated by the California Institute of Technology, under contract with the National Aeronautics and Space Administration under the Exoplanet Exploration Program. Solar system orbits come from NASA/JPL. See [DATA_LICENSES.md](DATA_LICENSES.md).
+Star positions come from the [HYG Database](https://codeberg.org/astronexus/hyg) v4.4 (c) astronexus.com, CC BY-SA 4.0. Constellation figures come from [Stellarium](https://github.com/Stellarium/stellarium)'s modern sky culture, CC BY-SA 4.0. The 3D dust map is Edenhofer et al. (2024, A&A 685, A82), [CC BY 4.0](https://zenodo.org/records/10658339). Nebulae come from the Sharpless and van den Bergh catalogs, with distances from Mendez-Delgado et al. (2022), Foster & Brunt (2015) and Anderson et al. (2014), via [VizieR](https://vizier.cds.unistra.fr/) (CDS, Strasbourg). This project has made use of the [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/), which is operated by the California Institute of Technology, under contract with the National Aeronautics and Space Administration under the Exoplanet Exploration Program. Solar system orbits come from NASA/JPL. See [DATA_LICENSES.md](DATA_LICENSES.md).

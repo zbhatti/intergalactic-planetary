@@ -103,10 +103,7 @@ pub fn star_body(catalog: &HygCatalog, i: usize, name: String) -> (BodyInfo, f64
         ),
         (
             "Apparent magnitude (from Sun)",
-            format!(
-                "{:.2}",
-                catalog.apparent_magnitude(i, bevy::math::DVec3::ZERO)
-            ),
+            format!("{:.2}", catalog.apparent_magnitude_from_sun(i)),
         ),
         (
             "Distance from Sun",
@@ -118,6 +115,16 @@ pub fn star_body(catalog: &HygCatalog, i: usize, name: String) -> (BodyInfo, f64
                 )
             } else {
                 format!("unknown (no parallax; shown at {dist_pc:.0} pc)")
+            },
+        ),
+        (
+            "Dust from Sun",
+            match catalog.av_from_sun.get(i).copied() {
+                Some(av) if av >= 0.01 => {
+                    format!("A_V {av:.2} mag (3D dust map)")
+                }
+                Some(_) => "negligible".to_string(),
+                None => "n/a".to_string(),
             },
         ),
         (
@@ -256,10 +263,8 @@ pub fn update_star_proxy(
                     ..default()
                 })),
                 Star {
-                    spectral: s.class,
-                    radius_solar: radius_solar as f32,
-                    visual_lum: s.lum,
-                    last_brightness: 0.0,
+                    no_dust: !s.dist_known,
+                    ..Star::new(s.class, radius_solar as f32, s.lum)
                 },
             ));
             proxy.entity = Some(e);

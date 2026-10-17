@@ -1,6 +1,7 @@
 use crate::camera::FlyCam;
 use crate::constants::{AU_PER_PC, KM_PER_AU};
 use crate::coords::{BodyRadius, WorldPos};
+use crate::dust::{Dust, DustSettings, av_between, transmission};
 use crate::hyg::HygCatalog;
 use crate::hyg_bodies::HygEntities;
 use crate::info::{BodyInfo, BodyKind, star_facts};
@@ -144,6 +145,28 @@ pub struct Star {
     pub visual_lum: f32,
     /// Brightness last written to the material; skips GPU re-uploads for changes < 1%.
     pub last_brightness: f32,
+    /// Per-channel dust transmission from the camera (1 = no dust), refreshed with brightness.
+    pub dust: [f32; 3],
+    /// No measured distance (placeholder position): dust isn't applied.
+    pub no_dust: bool,
+}
+
+/// Luminance (Rec. 709 weights) of a per-channel transmission.
+pub fn luminance(t: [f32; 3]) -> f32 {
+    0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2]
+}
+
+impl Star {
+    pub fn new(spectral: char, radius_solar: f32, visual_lum: f32) -> Self {
+        Self {
+            spectral,
+            radius_solar,
+            visual_lum,
+            last_brightness: 0.0,
+            dust: [1.0; 3],
+            no_dust: false,
+        }
+    }
 }
 
 /// For each curated star (CATALOG_STARS order), its index in the HYG catalog. Matched stars
@@ -265,12 +288,7 @@ pub fn setup_stars(
                     kind: BodyKind::Star,
                     facts: star_facts(spect, luminosity as f64, radius_solar as f64, dist),
                 },
-                Star {
-                    spectral: spect,
-                    radius_solar,
-                    visual_lum,
-                    last_brightness: 0.0,
-                },
+                Star::new(spect, radius_solar, visual_lum),
             ))
             .id();
 
@@ -303,9 +321,12 @@ pub fn update_star_brightness(
     mut materials: ResMut<Assets<StandardMaterial>>,
     exposure: Res<ExposureSettings>,
     fov: Res<CameraFov>,
+    dust: Option<Res<Dust>>,
+    dust_settings: Option<Res<DustSettings>>,
 ) {
     let Ok(cam) = cam_query.single() else { return };
-    if !cam.is_changed() && !exposure.is_changed() && !fov.is_changed() {
+    let dust_changed = dust_settings.as_ref().is_some_and(|d| d.is_changed());
+    if !cam.is_changed() && !exposure.is_changed() && !fov.is_changed() && !dust_changed {
         return;
     }
     let ev_factor = exposure.factor();
@@ -316,14 +337,25 @@ pub fn update_star_brightness(
         let radius_au = star.radius_solar as f64 * SOLAR_RADIUS_UNITS;
         let brightness =
             sphere_brightness(ev_factor, star.visual_lum, radius_au, dist_au, min_angle);
-        if (brightness / star.last_brightness.max(f32::MIN_POSITIVE) - 1.0).abs() > 0.01 {
+        // Dust between the camera and the star dims and reddens it (stars' luminosities are
+        // de-reddened at startup, so from home this restores the observed brightness).
+        let t = match (&dust, &dust_settings) {
+            (Some(d), Some(s)) if !star.no_dust => transmission(av_between(d, s, cam.0, pos.0)),
+            _ => [1.0; 3],
+        };
+        let changed = (brightness / star.last_brightness.max(f32::MIN_POSITIVE) - 1.0).abs() > 0.01
+            || t.iter()
+                .zip(star.dust)
+                .any(|(a, b)| (a / b.max(1e-9) - 1.0).abs() > 0.01);
+        if changed {
             star.last_brightness = brightness;
+            star.dust = t;
             let base = spectral_color(star.spectral);
             if let Some(mat) = materials.get_mut(&mat_handle.0) {
                 mat.emissive = LinearRgba::new(
-                    base.red * brightness,
-                    base.green * brightness,
-                    base.blue * brightness,
+                    base.red * brightness * t[0],
+                    base.green * brightness * t[1],
+                    base.blue * brightness * t[2],
                     1.0,
                 );
             }

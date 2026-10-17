@@ -44,6 +44,9 @@ pub struct HygCatalog {
     /// (star index, proper name). Read by tests now; named-star entities (search/go-to) next.
     #[allow(dead_code)]
     pub names: Vec<(usize, String)>,
+    /// V-band extinction (mag) between each star and the Sun, set when the catalog is de-reddened
+    /// (`dust::deredden_catalog`); empty before that.
+    pub av_from_sun: Vec<f32>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -106,7 +109,11 @@ impl HygCatalog {
             names.push((index, name.to_string()));
             at += 6 + len;
         }
-        Ok(Self { stars, names })
+        Ok(Self {
+            stars,
+            names,
+            av_from_sun: Vec::new(),
+        })
     }
 
     pub fn embedded() -> Self {
@@ -118,7 +125,15 @@ impl HygCatalog {
         self.names.iter().find(|(_, n)| n == name).map(|(i, _)| *i)
     }
 
-    /// Apparent visual magnitude from `observer` (AU), from luminosity and distance.
+    /// Apparent visual magnitude as observed from the Sun: intrinsic plus the dust removed by
+    /// de-reddening, i.e. the catalog's own magnitude.
+    pub fn apparent_magnitude_from_sun(&self, i: usize) -> f64 {
+        self.apparent_magnitude(i, DVec3::ZERO)
+            + self.av_from_sun.get(i).copied().unwrap_or(0.0) as f64
+    }
+
+    /// Apparent visual magnitude from `observer` (AU), from luminosity and distance, without
+    /// dust (after de-reddening, `lum` is the star's intrinsic visual luminosity).
     pub fn apparent_magnitude(&self, i: usize, observer: DVec3) -> f64 {
         let s = &self.stars[i];
         let d_pc = (s.pos.distance(observer) / AU_PER_PC).max(1e-6);
@@ -128,7 +143,7 @@ impl HygCatalog {
     /// Indices of stars brighter than `max_mag` as seen from the Sun.
     pub fn bright_indices(&self, max_mag: f64) -> Vec<usize> {
         (0..self.stars.len())
-            .filter(|&i| self.apparent_magnitude(i, DVec3::ZERO) <= max_mag)
+            .filter(|&i| self.apparent_magnitude_from_sun(i) <= max_mag)
             .collect()
     }
 
