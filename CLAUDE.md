@@ -96,6 +96,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `exoplanets.rs` | NASA Exoplanet Archive systems: hosts matched to HYG by HIP or appended to `HygCatalog` (`hyg_id == 0`) in `main` before anything reads it; host entities (searchable, no labels); planets spawned only near their star |
 | `spectrum.rs` | Visible spectrum -> colour: CIE 1931 matching functions (analytic fit) -> linear sRGB; H II emission lines; dust-scattered starlight |
 | `nebulae.rs` + `nebula.wgsl` | 168 Sharpless H II regions + 52 van den Bergh reflection nebulae; emissive spheres ray-traced in a cube (back faces only), surface brightness on the star scale; `NotASurface` so flying through doesn't stall speed |
+| `milky_way.rs` + `milky_way.wgsl` | Modelled glow of unresolved stars (discs + bar/bulge, Flynn 2006 normalization) minus the catalog's share, behind Edenhofer dust + a smooth far dust disc; CPU ray march into a 384x192 Galactic texture on a background thread, drawn opaque on a cube around the camera |
 | `dust.rs` + `dust.wgsl` | Edenhofer+ 2024 3D dust grid: CPU line integral (the reference), `deredden_catalog` at startup, 3D texture + matching WGSL march (`ip::dust` import) used by the starfield and nebula shaders; CCM89 per-channel reddening |
 | `ui.rs` | Distance/speed/exposure HUD labels, `format_distance`, `format_speed` |
 | `navigation.rs` | HUD reticle, off-screen arrow gizmo, camera auto-orient |
@@ -116,7 +117,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | I | Show/hide the info panel for the selection |
 | B | Solar system browser (Up/Down, Enter to select, B/Esc to close) |
 | N | Star browser: nearest stars, Tab for brightest from here |
-| K | Locations: Enter saves the current view / jumps to a saved one, Delete removes |
+| K | Locations: Enter saves the current view / jumps to a saved one, Delete or Backspace removes |
 | `[` / `]` | Decrease / increase exposure (EV-5 to EV+20) |
 | `\` | Auto-exposure on/off (on by default) |
 | Enter | Open object search |
@@ -271,6 +272,18 @@ CPU users: sphere stars, label magnitudes (cached per 0.1 pc of camera motion), 
 picking, auto-exposure. Stars with no measured distance (`dist_known == false`) get no dust.
 `HygCatalog::apparent_magnitude` is now intrinsic; use `apparent_magnitude_from_sun` for the
 observed value. WGSL in an imported module (naga_oil) can't use identifiers ending in a digit.
+
+### 18. The Milky Way glow is a model, and only the unresolved part
+
+`milky_way.rs` draws what the catalog can't: the model's luminosity times (1 - completeness), where
+completeness is HYG's share of the model's light per 25 pc shell from the Sun (measured at startup).
+Without that, the stars near the Sun would be counted twice. Its brightness is checked against
+Pioneer 10's integrated starlight (`test_matches_pioneer_10`). The texture is recomputed on a
+background thread only after the camera has moved 10 pc *and* stopped, so flights don't pay for
+it. Two Bevy traps: a material keeps the old GPU texture after its `Image` changes, so touch the
+material (`get_mut`) after writing the image; and a full-screen additive blend costs ~2 ms on the
+HD 520, so the glow is drawn opaque (no depth write) like a skybox, and skipped entirely when its
+brightest texel is invisible at the current exposure.
 
 ### 10. Benchmarks need an awake display
 
