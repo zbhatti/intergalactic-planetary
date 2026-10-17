@@ -39,7 +39,20 @@ A 3D universe explorer built with Rust and Bevy, inspired by SpaceEngine. Naviga
 cargo run
 ```
 
-Requires Rust 1.88+ and a Metal-capable GPU (macOS) or Vulkan/DX12 (other platforms).
+Requires Rust 1.88+ and a Metal-capable GPU (macOS) or Vulkan/DX12 (other platforms). OpenGL works
+as a fallback (`WGPU_BACKEND=gl cargo run`).
+
+### Troubleshooting older GPUs
+
+- **Debug build aborts with `Unable to load cmd_begin_debug_utils_label_ext`** (seen on Intel Haswell
+  with Mesa 21): fixed in IP, which no longer turns on wgpu's debug labels by default. If you turned
+  them on yourself with `WGPU_DEBUG=1`, turn them off again.
+- **Panic creating `bloom_texture` (`Rg11b10Ufloat`)**: IP now skips bloom on GPUs that can't render
+  that format, and logs `bloom off`. `IP_BLOOM=0` turns bloom off by hand.
+- **OpenGL panics on `downsample depth` pipelines**: fixed when GL is chosen with
+  `WGPU_BACKEND=gl`. IP then turns off Bevy's GPU occlusion culling, which IP doesn't use.
+- Pick the GPU with `WGPU_POWER_PREF=low` (integrated) or `high` (discrete), and the backend with
+  `WGPU_BACKEND=vulkan|gl|dx12|metal`. The `AdapterInfo` log line shows which one was used.
 
 ## Project structure
 

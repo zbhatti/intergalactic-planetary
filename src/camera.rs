@@ -1,13 +1,14 @@
 use crate::coords::WorldPos;
 use crate::goto::GoTo;
+use crate::gpu_compat;
 use crate::menu::MenuOpen;
 use crate::search::Search;
 use crate::speed::CurrentSpeed;
 use bevy::{
-    core_pipeline::bloom::Bloom,
     input::mouse::MouseMotion,
     math::DVec3,
     prelude::*,
+    render::renderer::{RenderAdapter, RenderDevice},
     render::view::screenshot::{Screenshot, save_to_disk},
     window::CursorGrabMode,
 };
@@ -49,18 +50,22 @@ pub const CAMERA_FAR_AU: f32 = 1.0e15;
 /// Near plane, AU (~150 m).
 pub const CAMERA_NEAR_AU: f32 = 1.0e-6;
 
-pub fn setup_camera(mut commands: Commands, mut windows: Query<&mut Window>) {
+pub fn setup_camera(
+    mut commands: Commands,
+    mut windows: Query<&mut Window>,
+    device: Option<Res<RenderDevice>>,
+    adapter: Option<Res<RenderAdapter>>,
+) {
     if let Ok(mut window) = windows.single_mut() {
         window.cursor_options.grab_mode = CursorGrabMode::Locked;
         window.cursor_options.visible = false;
     }
-    commands.spawn((
+    let camera = commands.spawn((
         Camera3d::default(),
         Camera {
             hdr: true,
             ..default()
         },
-        Bloom::NATURAL,
         Projection::Perspective(PerspectiveProjection {
             near: CAMERA_NEAR_AU,
             far: CAMERA_FAR_AU,
@@ -70,6 +75,13 @@ pub fn setup_camera(mut commands: Commands, mut windows: Query<&mut Window>) {
         WorldPos(DVec3::new(0.0, 0.002, 0.01)),
         FlyCam::default(),
     ));
+    let camera = camera.id();
+    gpu_compat::add_bloom_if_supported(
+        &mut commands,
+        camera,
+        device.as_deref(),
+        adapter.as_deref(),
+    );
 }
 
 pub fn mouse_look(

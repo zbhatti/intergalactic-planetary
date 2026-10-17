@@ -90,6 +90,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `ui.rs` | Distance/speed/exposure HUD labels, `format_distance`, `format_speed` |
 | `navigation.rs` | HUD reticle, off-screen arrow gizmo, camera auto-orient |
 | `menu.rs` | Esc pause menu, background stars toggle, quit button |
+| `gpu_compat.rs` | Old-GPU workarounds: wgpu debug labels off, bloom only if `Rg11b10Ufloat` is renderable, no GPU culling on GL-only |
 | `perf.rs` | F3 perf overlay, `IP_BENCH` scripted benchmark mode, frame-time stats |
 | `testing.rs` | Headless test harness (test builds only): fixed 60 Hz clock, real key events |
 
@@ -144,6 +145,11 @@ Background stars (randomly generated, 2000 of them) are spawned as unit spheres 
 The default Bevy font has no glyphs for Unicode characters like `▶`, `×`, `✓`, `→`, or any emoji. They render as white rectangles. Always use ASCII alternatives (`>`, `x`, `[x]`, `->`). The tests `test_format_distance_is_ascii_only` and `test_format_speed_is_ascii_only` guard against this.
 
 ### 4. HDR and bloom must be enabled together
+
+Bloom is added by `gpu_compat::add_bloom_if_supported`, not in the camera bundle: some GPUs (GL on
+Mesa Haswell, issue #11) can't render bloom's `Rg11b10Ufloat` texture. Test old-driver paths with
+`WGPU_BACKEND=gl cargo run` on the Intel iGPU (it has no `Rg11b10Ufloat` rendering there either).
+
 
 Stars use high emissive values to appear bright. Without HDR (`Camera { hdr: true }`), values above 1.0 clip to white and lose color information. Without `Bloom::NATURAL`, a tiny bright sphere may not be visually obvious even if it's rendering correctly. Both are set in `setup_camera`.
 
