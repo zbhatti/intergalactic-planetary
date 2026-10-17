@@ -34,6 +34,7 @@ pub enum MenuItem {
     Labels,
     PlanetLabels,
     MoonLabels,
+    SmallBodyLabels,
     StarLabels,
     StarMagLimit,
     Constellations,
@@ -53,11 +54,12 @@ pub struct MenuSettings<'a> {
 }
 
 impl MenuItem {
-    pub const TOGGLES: [MenuItem; 11] = [
+    pub const TOGGLES: [MenuItem; 12] = [
         MenuItem::CatalogStars,
         MenuItem::Labels,
         MenuItem::PlanetLabels,
         MenuItem::MoonLabels,
+        MenuItem::SmallBodyLabels,
         MenuItem::StarLabels,
         MenuItem::StarMagLimit,
         MenuItem::Constellations,
@@ -79,6 +81,9 @@ impl MenuItem {
             MenuItem::Labels => checkbox_text("Labels (L)", labels.enabled),
             MenuItem::PlanetLabels => checkbox_text("  Planet labels", labels.planets),
             MenuItem::MoonLabels => checkbox_text("  Moon labels", labels.moons),
+            MenuItem::SmallBodyLabels => {
+                checkbox_text("  Asteroid and comet labels", labels.small_bodies)
+            }
             MenuItem::StarLabels => checkbox_text("  Star labels", labels.stars),
             MenuItem::StarMagLimit => {
                 format!("  Label stars brighter than mag {}", labels.star_mag_limit)
@@ -104,6 +109,7 @@ impl MenuItem {
             MenuItem::Labels => labels.enabled = !labels.enabled,
             MenuItem::PlanetLabels => labels.planets = !labels.planets,
             MenuItem::MoonLabels => labels.moons = !labels.moons,
+            MenuItem::SmallBodyLabels => labels.small_bodies = !labels.small_bodies,
             MenuItem::StarLabels => labels.stars = !labels.stars,
             MenuItem::StarMagLimit => labels.star_mag_limit = labels.next_mag_limit(),
             MenuItem::Constellations => sky.constellations = !sky.constellations,
@@ -163,6 +169,7 @@ pub fn setup_pause_menu(mut commands: Commands) {
     commands
         .spawn((
             PauseMenu,
+            crate::labels::LabelBlocker,
             Node {
                 position_type: PositionType::Absolute,
                 left: Val::Percent(30.0),

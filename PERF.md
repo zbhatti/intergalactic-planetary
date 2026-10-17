@@ -46,6 +46,7 @@ cargo test --release -- --ignored --nocapture perf_   # CPU micro-benchmarks for
 | 2026-10-17 | Phase 2.14a: auto-exposure (tour adapts at Sun/Sirius every loop) | release | 1201 | 16.67 | 17.57 | 33.01 | 2 | 2020 |
 | 2026-10-17 | Phase 2.9: exoplanets (+4,813 host entities, +~4,000 starfield stars) | release | 1200 | 16.67 | 17.62 | 33.54 | 2 | 6970 |
 | 2026-10-17 | Phase 2.9: exoplanet tour (TRAPPIST-1, Kepler-22, Sun; keys: B) | release | 720 | 16.67 | 17.57 | 28.92 | 2 | 6969 |
+| 2026-10-17 | Phase 2.6: +9 asteroids, +5 comets; stripped release binary (109 -> 64 MB) | release | 1196 | 16.74 | 17.82 | 46.36 | 3 | 7000 |
 
 ## Micro-benchmarks (`cargo test --release -- --ignored --nocapture perf_`)
 

@@ -84,7 +84,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `search.rs` | `Search` + `ObjectCatalog` resources, search UI, `catalog_matches` |
 | `speed.rs` | Distance-adaptive speed (`CurrentSpeed`), Shift-to-cycle throttle |
 | `orbit.rs` | Reference frames (equatorial/ecliptic → world), Kepler solver, `Elements`, `SCENE_JD` |
-| `solar_system.rs` | Sun, 8 planets, 5 dwarf planets, 21 major moons from JPL elements; min apparent size for bodies |
+| `solar_system.rs` | Sun, 8 planets, 5 dwarf planets, 9 asteroids, 5 comets, 21 major moons from JPL elements; min apparent size for bodies |
 | `stars.rs` | 58 curated sphere stars (matched to HYG for visual luminosity), `star_world_pos`, brightness model, dynamic scaling |
 | `hyg.rs` | Embedded HYG catalog (`data/hyg_stars.bin`): little-endian parser, magnitudes, direction matching |
 | `hyg_bodies.rs` | HYG stars as entities on demand: 540 named (search/go-to), crosshair-picked, and a close-range sphere proxy for the nearest star (<2000 AU) |
