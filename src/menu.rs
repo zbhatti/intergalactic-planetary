@@ -11,7 +11,7 @@ pub struct MenuOpen(pub bool);
 pub const CATALOG_STARS_LABEL: &str = "Catalog stars (HYG)";
 
 /// Attribution required by the CC BY-SA 4.0 licenses of the embedded star and constellation data.
-pub const DATA_CREDIT: &str = "Star data: HYG Database v4.4 (c) astronexus.com, CC BY-SA 4.0\nConstellation figures: Stellarium (modern sky culture), CC BY-SA 4.0\nOrbits: NASA/JPL Solar System Dynamics";
+pub const DATA_CREDIT: &str = "Star data: HYG Database v4.4 (c) astronexus.com, CC BY-SA 4.0\nConstellation figures: Stellarium (modern sky culture), CC BY-SA 4.0\nExoplanets: NASA Exoplanet Archive (Caltech, under contract with NASA)\nOrbits: NASA/JPL Solar System Dynamics";
 
 /// Whether the HYG catalog starfield (~109k real stars) is rendered. On by default.
 #[derive(Resource)]

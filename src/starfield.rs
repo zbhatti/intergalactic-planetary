@@ -334,6 +334,7 @@ mod tests {
             hyg_id: 0,
             class: 'G',
             dist_known: true,
+            radius_sun: None,
         }
     }
 

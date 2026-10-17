@@ -93,6 +93,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `labels.rs` | Name labels: type/magnitude filters (`LabelSettings`), primary-separation rule for moons, occlusion by planet disks, greedy declutter, HUD avoidance (`LabelBlocker`) |
 | `sky.rs` | Equatorial/ecliptic/galactic grids and 88 constellation figures (Stellarium data, HIP -> HYG), gizmo lines on a 1000 AU sphere around the camera; C toggles figures |
 | `auto_exposure.rs` | Eye adaptation: darkens (never brightens past the manual EV) so the brightest star in view sits at `TARGET_PEAK`; `\` toggles |
+| `exoplanets.rs` | NASA Exoplanet Archive systems: hosts matched to HYG by HIP or appended to `HygCatalog` (`hyg_id == 0`) in `main` before anything reads it; host entities (searchable, no labels); planets spawned only near their star |
 | `ui.rs` | Distance/speed/exposure HUD labels, `format_distance`, `format_speed` |
 | `navigation.rs` | HUD reticle, off-screen arrow gizmo, camera auto-orient |
 | `menu.rs` | Esc pause menu: data-driven `MenuItem` toggles whose text is regenerated from the settings |
@@ -238,6 +239,13 @@ for UI: writing `Text` or `Node` re-runs layout, so compare first. Hide labels w
 Under Bevy's reverse-Z, `GizmoConfig::depth_bias = 1.0` puts lines at depth 0, which fails the depth test
 against the cleared buffer, so nothing draws. `sky.rs` instead draws on a sphere 1000 AU around the camera,
 far beyond any solar-system body, so planets occlude it naturally.
+
+### 15. Thousands of star entities: no Transform until drawn
+
+`hyg_bodies::promote` spawns star entities with `WorldPos`/`BodyRadius`/`BodyInfo` only. With ~5000
+named stars and exoplanet hosts, a `Transform` on each would be rewritten and propagated on every
+floating-origin rebase. The proxy sphere adds `Transform` (at the right render position) when it
+gives a star a mesh. Keep new per-star entities Transform-free unless they render.
 
 ### 10. Benchmarks need an awake display
 

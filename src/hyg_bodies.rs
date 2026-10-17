@@ -80,11 +80,13 @@ pub fn star_name(catalog: &HygCatalog, i: usize, proper: Option<&str>) -> String
 #[derive(Resource, Default)]
 pub struct HygEntities(pub HashMap<usize, Entity>);
 
-fn star_body(catalog: &HygCatalog, i: usize, name: String) -> (BodyInfo, f64, f64) {
+pub fn star_body(catalog: &HygCatalog, i: usize, name: String) -> (BodyInfo, f64, f64) {
     let s = &catalog.stars[i];
     let teff = class_temperature(s.class);
-    let radius_solar =
-        estimated_radius_solar(estimated_bolometric_lum(s.lum as f64, s.class), teff);
+    let radius_solar = s.radius_sun.map_or_else(
+        || estimated_radius_solar(estimated_bolometric_lum(s.lum as f64, s.class), teff),
+        |r| r as f64,
+    );
     let dist_pc = s.pos.length() / AU_PER_PC;
     let mut facts = vec![
         (
@@ -120,13 +122,20 @@ fn star_body(catalog: &HygCatalog, i: usize, name: String) -> (BodyInfo, f64, f6
         ),
         (
             "Radius source",
-            format!(
-                "estimated from L and class (~{} Sun)",
-                format_sig(radius_solar)
-            ),
+            if s.radius_sun.is_some() {
+                format!("NASA Exoplanet Archive ({} Sun)", format_sig(radius_solar))
+            } else {
+                format!(
+                    "estimated from L and class (~{} Sun)",
+                    format_sig(radius_solar)
+                )
+            },
         ),
     ];
-    if s.hip != 0 {
+    if s.hyg_id == 0 {
+        // Appended at startup (exoplanets.rs): a host star that HYG doesn't list.
+        facts.push(("Catalog", "NASA Exoplanet Archive (not in HYG)".to_string()));
+    } else if s.hip != 0 {
         facts.push(("Catalog", format!("HIP {}, HYG {}", s.hip, s.hyg_id)));
     } else {
         facts.push(("Catalog", format!("HYG {}", s.hyg_id)));
@@ -157,15 +166,24 @@ pub fn promote(
         .iter()
         .find(|(k, _)| *k == i)
         .map(|(_, n)| n.as_str());
-    let (info, _, radius_au) = star_body(catalog, i, star_name(catalog, i, proper));
+    let name = star_name(catalog, i, proper);
+    promote_named(commands, catalog, entities, i, name)
+}
+
+/// [`promote`], naming a newly spawned entity `name` (an existing one keeps its name).
+pub fn promote_named(
+    commands: &mut Commands,
+    catalog: &HygCatalog,
+    entities: &mut HygEntities,
+    i: usize,
+    name: String,
+) -> Entity {
+    if let Some(&e) = entities.0.get(&i) {
+        return e;
+    }
+    let (info, _, radius_au) = star_body(catalog, i, name);
     let e = commands
-        .spawn((
-            WorldPos(catalog.stars[i].pos),
-            BodyRadius(radius_au),
-            info,
-            Transform::default(),
-            Visibility::default(),
-        ))
+        .spawn((WorldPos(catalog.stars[i].pos), BodyRadius(radius_au), info))
         .id();
     entities.0.insert(i, e);
     e
@@ -181,7 +199,9 @@ pub fn spawn_named_stars(
 ) {
     let skip: HashSet<usize> = curated.0.iter().flatten().copied().collect();
     for (i, name) in &catalog.names {
-        if skip.contains(i) {
+        // Curated stars have their own entities; appended exoplanet hosts (hyg_id 0) are
+        // spawned, without labels, by exoplanets::spawn_hosts.
+        if skip.contains(i) || catalog.stars[*i].hyg_id == 0 {
             continue;
         }
         let e = promote(&mut commands, &catalog, &mut entities, *i);
@@ -225,6 +245,11 @@ pub fn update_star_proxy(
             let s = &catalog.stars[i];
             let (_, radius_solar, radius_au) = star_body(&catalog, i, String::new());
             commands.entity(e).insert((
+                // Promoted stars have no Transform until they're drawn (thousands of them would
+                // otherwise be rewritten on every rebase); place it now, since the rebase sync
+                // only moves transforms whose WorldPos or the origin changed.
+                Transform::from_translation(render_offset(s.pos, origin.0)),
+                Visibility::default(),
                 Mesh3d(meshes.add(Sphere::new(radius_au as f32))),
                 MeshMaterial3d(std_materials.add(StandardMaterial {
                     emissive: spectral_color(s.class),
