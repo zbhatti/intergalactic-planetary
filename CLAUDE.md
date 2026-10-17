@@ -18,7 +18,7 @@ The project is named **IP** (crate/binary `intergalactic-planetary`, window titl
 
 ### Dev machine note (Surface Book)
 
-The main dev machine's NVIDIA dGPU sits in a keyboard base that can overheat and hard power-off. A git-ignored `.cargo/config.toml` sets `WGPU_POWER_PREF=low` so `cargo run` uses the Intel iGPU (check the `AdapterInfo` log line). Prefer functionality over graphical polish, and keep GPU-heavy test runs short. To run from an SSH session, target the local X display: `DISPLAY=:0 XAUTHORITY=/run/user/1000/gdm/Xauthority cargo run`.
+The main dev machine's NVIDIA dGPU sits in a keyboard base that can overheat and hard power-off. A git-ignored `.cargo/config.toml` sets `WGPU_POWER_PREF=low` so `cargo run` uses the Intel iGPU (check the `AdapterInfo` log line). Prefer functionality over graphical polish, and keep GPU-heavy test runs short. To run from an SSH session, target the local X display: `DISPLAY=:0 XAUTHORITY=/run/user/1000/gdm/Xauthority cargo run`. The same config sets `VK_DRIVER_FILES`/`VK_ICD_FILENAMES` to the Intel ICD only: wgpu enumerates every Vulkan adapter at startup, and without that every launch also loads the NVIDIA driver and wakes the dGPU. When running a built binary directly (`./target/release/...`), export those variables yourself.
 
 ## Tech stack
 
@@ -89,6 +89,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `starfield.rs` + `starfield.wgsl` | 109k HYG stars as billboard meshes in 200 pc chunks (one draw each); shader brightness/size = same model as `stars.rs`; nearest-catalog-star scan |
 | `zoom.rs` | Mouse-wheel FOV (`CameraFov`), `min_star_angle(fov)` keeps points the same pixel size at any zoom |
 | `labels.rs` | Name labels: type/magnitude filters (`LabelSettings`), primary-separation rule for moons, occlusion by planet disks, greedy declutter, HUD avoidance (`LabelBlocker`) |
+| `sky.rs` | Equatorial/ecliptic/galactic grids and 88 constellation figures (Stellarium data, HIP -> HYG), gizmo lines on a 1000 AU sphere around the camera; C toggles figures |
 | `ui.rs` | Distance/speed/exposure HUD labels, `format_distance`, `format_speed` |
 | `navigation.rs` | HUD reticle, off-screen arrow gizmo, camera auto-orient |
 | `menu.rs` | Esc pause menu: data-driven `MenuItem` toggles whose text is regenerated from the settings |
@@ -114,6 +115,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | Esc (in search) | Close search |
 | Mouse wheel / middle click | Zoom (FOV 120 deg to 0.01 deg) / reset |
 | L | Labels on/off |
+| C | Constellation figures and names on/off (grids in the Esc menu) |
 | Esc | Open/close pause menu |
 | F3 | Toggle performance overlay (fps, frame times, entity count) |
 | F12 | Save screenshot |
@@ -220,6 +222,12 @@ write. Keep a handle and compare before `get_mut` (see `starfield::sync_starfiel
 for UI: writing `Text` or `Node` re-runs layout, so compare first. Hide labels with
 `Display::None` (skipped by layout), not `Visibility::Hidden`.
 
+### 14. Sky gizmos: no depth_bias = 1
+
+Under Bevy's reverse-Z, `GizmoConfig::depth_bias = 1.0` puts lines at depth 0, which fails the depth test
+against the cleared buffer, so nothing draws. `sky.rs` instead draws on a sphere 1000 AU around the camera,
+far beyond any solar-system body, so planets occlude it naturally.
+
 ### 10. Benchmarks need an awake display
 
 With the screen blanked, GNOME throttles presentation to a constant 250 ms per frame. Run `bash ~/bin/wake-screen.sh`
@@ -274,5 +282,8 @@ cargo clippy --all-targets -- -D warnings
 ```
 
 To regenerate the star catalog: `python3 -I tools/build_hyg.py <hyg_v44.csv.gz> data/hyg_stars.bin`.
+To regenerate the constellation figures: `python3 -I tools/build_constellations.py <stellarium skycultures/modern/index.json> data/constellations.txt`.
+The catalog keeps stars of mag <= 7 that have no distance (placed at 1 kpc, `HygStar::dist_known == false`) so every
+constellation endpoint resolves; `sky::tests::test_every_figure_star_resolves` checks it.
 
 Linux builds additionally require: `libxkbcommon-dev pkg-config`. (Audio and gamepad support are compiled out, so `libasound2-dev`/`libudev-dev` are no longer needed.)

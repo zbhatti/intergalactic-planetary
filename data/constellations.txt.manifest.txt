@@ -1,0 +1,7 @@
+IP constellation figures derived from Stellarium's modern sky culture
+Source: https://github.com/Stellarium/stellarium/tree/master/skycultures/modern (index.json)
+License: CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/), (c) Stellarium's team; this file is a derived database under the same license
+Source sha256: 1f2f5ffd6c9e25a7d0dcfdbf1f756e2db03dd3b8ed4ec016a2839b09f6b0fe1e
+Constellations: 88
+Line segments: 695
+Built by: python3 -I tools/build_constellations.py <index.json> data/constellations.txt

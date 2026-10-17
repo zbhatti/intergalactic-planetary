@@ -11,7 +11,12 @@ use bevy::prelude::*;
 static HYG_BIN: &[u8] = include_bytes!("../data/hyg_stars.bin");
 
 const MAGIC: &[u8; 8] = b"IPHYG\0\0\0";
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
+/// Record flag: no measured distance; placed at `tools/build_hyg.py`'s FALLBACK_PC.
+const FLAG_DIST_UNKNOWN: u8 = 1;
+/// Where `build_hyg.py` places naked-eye stars without a distance (FALLBACK_PC).
+#[cfg(test)]
+pub const FALLBACK_DIST_PC: f64 = 1000.0;
 const RECORD_BYTES: usize = 28;
 const HEADER_BYTES: usize = 20;
 
@@ -26,6 +31,8 @@ pub struct HygStar {
     pub hyg_id: u32,
     /// Spectral class letter (O B A F G K M), or ' ' if unknown.
     pub class: char,
+    /// False for naked-eye stars without a measured distance, placed at [`FALLBACK_DIST_PC`].
+    pub dist_known: bool,
 }
 
 #[derive(Resource, Debug, Default)]
@@ -69,12 +76,14 @@ impl HygCatalog {
                 f32_at(b, at + 8)? as f64,
             );
             let class = *b.get(at + 24).ok_or(ParseError::Truncated)?;
+            let flags = *b.get(at + 25).ok_or(ParseError::Truncated)?;
             stars.push(HygStar {
                 pos: equatorial_to_world(eq_pc) * AU_PER_PC,
                 lum: f32_at(b, at + 12)?,
                 hip: u32_at(b, at + 16)?,
                 hyg_id: u32_at(b, at + 20)?,
                 class: if class == 0 { ' ' } else { class as char },
+                dist_known: flags & FLAG_DIST_UNKNOWN == 0,
             });
         }
         let mut at = HEADER_BYTES + count * RECORD_BYTES;
@@ -147,10 +156,12 @@ mod tests {
         let cat = HygCatalog::embedded();
         assert_eq!(
             cat.stars.len(),
-            109_389,
+            109_819,
             "matches data/hyg_stars.bin.manifest.txt"
         );
-        assert_eq!(cat.names.len(), 540);
+        assert_eq!(cat.names.len(), 544);
+        let unknown = cat.stars.iter().filter(|s| !s.dist_known).count();
+        assert_eq!(unknown, 430);
     }
 
     #[test]
@@ -177,6 +188,19 @@ mod tests {
         let sep_deg = hyg.angle_between(curated).to_degrees();
         assert!(sep_deg < 0.1, "direction off by {sep_deg} deg");
         assert!((hyg.length() / curated.length() - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_naked_eye_stars_without_distance_are_kept_in_the_sky() {
+        // Polis (HIP 89341, mag 3.84) has no Hipparcos distance; it's placed at the fallback
+        // distance with its real direction and apparent magnitude.
+        let cat = HygCatalog::embedded();
+        let i = cat.index_of_name("Polis").expect("Polis kept");
+        let s = &cat.stars[i];
+        assert!(!s.dist_known);
+        assert!((s.pos.length() / AU_PER_PC - FALLBACK_DIST_PC).abs() < 1e-3);
+        assert!((cat.apparent_magnitude(i, DVec3::ZERO) - 3.84).abs() < 0.05);
+        assert!(cat.stars[cat.index_of_name("Sirius").unwrap()].dist_known);
     }
 
     #[test]

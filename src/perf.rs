@@ -11,6 +11,7 @@ use crate::goto::{Flight, GoTo};
 use crate::labels::LabelSettings;
 use crate::menu::ShowCatalogStars;
 use crate::search::{ObjectCatalog, Search};
+use crate::sky::SkySettings;
 use crate::zoom::CameraFov;
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
@@ -155,7 +156,8 @@ pub fn update_perf_overlay(
     }
 }
 
-/// Benchmark setup: worst-case visibility (all labels down to mag 6, and the catalog starfield).
+/// Benchmark setup: worst-case visibility (all labels down to mag 6, the catalog starfield, all
+/// grids and constellations).
 /// Keys `IP_BENCH_KEYS` can press at startup (e.g. `IP_BENCH_KEYS=B,I`), to put UI panels
 /// in the benchmark screenshot.
 pub fn bench_key(name: &str) -> Option<KeyCode> {
@@ -173,6 +175,7 @@ pub fn bench_setup(
     mut labels: ResMut<LabelSettings>,
     mut overlay: ResMut<ShowPerfOverlay>,
     mut fov: ResMut<CameraFov>,
+    mut sky: ResMut<SkySettings>,
     mut keys: EventWriter<KeyboardInput>,
 ) {
     // `IP_BENCH_FOV=<degrees>`: zoomed-in screenshots.
@@ -185,6 +188,12 @@ pub fn bench_setup(
     bg.0 = true;
     labels.enabled = true;
     labels.star_mag_limit = 6.0;
+    *sky = SkySettings {
+        equatorial_grid: true,
+        ecliptic_grid: true,
+        galactic_grid: true,
+        constellations: true,
+    };
     overlay.0 = true;
     let names = std::env::var("IP_BENCH_KEYS").unwrap_or_default();
     for key_code in names.split(',').filter_map(|n| bench_key(n.trim())) {

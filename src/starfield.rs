@@ -333,6 +333,7 @@ mod tests {
             hip: 0,
             hyg_id: 0,
             class: 'G',
+            dist_known: true,
         }
     }
 

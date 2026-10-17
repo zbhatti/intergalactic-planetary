@@ -16,6 +16,7 @@ mod navigation;
 mod orbit;
 mod perf;
 mod search;
+mod sky;
 mod solar_system;
 mod speed;
 mod starfield;
@@ -51,6 +52,7 @@ fn main() {
             perf::PerfPlugin,
             zoom::ZoomPlugin,
             labels::LabelsPlugin,
+            sky::SkyPlugin,
         ))
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(camera::CursorLocked(true))

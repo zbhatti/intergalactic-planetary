@@ -3,7 +3,8 @@ Source: https://codeberg.org/astronexus/hyg (data/hyg/CURRENT/hyg_v44.csv.gz)
 License: CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/); this file is a derived database under the same license
 Source sha256: 00b349893b9a53106dd488d8371e8d2fa586043e500bb3cdb8bff3931682197d
 Source rows: 119614
-Stars written: 109389
-Proper names: 540
-Skipped (no usable distance): 10224, of which naked-eye (mag <= 6.5): 205
+Stars written: 109819
+Proper names: 544
+Stars of mag <= 7 without a distance, placed at 1000 pc and flagged: 430
+Skipped (no usable distance, fainter than mag 7.0): 9794
 Built by: python3 -I tools/build_hyg.py <hyg_v44.csv.gz> data/hyg_stars.bin

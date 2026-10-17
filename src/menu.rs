@@ -1,6 +1,7 @@
 use crate::camera::CursorLocked;
 use crate::labels::LabelSettings;
 use crate::search::Search;
+use crate::sky::SkySettings;
 use bevy::{app::AppExit, prelude::*, window::CursorGrabMode};
 
 #[derive(Resource, Default)]
@@ -8,8 +9,8 @@ pub struct MenuOpen(pub bool);
 
 pub const CATALOG_STARS_LABEL: &str = "Catalog stars (HYG)";
 
-/// Attribution required by the CC BY-SA 4.0 license of the embedded star data.
-pub const DATA_CREDIT: &str = "Star data: HYG Database v4.4 (c) astronexus.com, CC BY-SA 4.0\nOrbits: NASA/JPL Solar System Dynamics";
+/// Attribution required by the CC BY-SA 4.0 licenses of the embedded star and constellation data.
+pub const DATA_CREDIT: &str = "Star data: HYG Database v4.4 (c) astronexus.com, CC BY-SA 4.0\nConstellation figures: Stellarium (modern sky culture), CC BY-SA 4.0\nOrbits: NASA/JPL Solar System Dynamics";
 
 /// Whether the HYG catalog starfield (~109k real stars) is rendered. On by default.
 #[derive(Resource)]
@@ -34,20 +35,40 @@ pub enum MenuItem {
     MoonLabels,
     StarLabels,
     StarMagLimit,
+    Constellations,
+    EquatorialGrid,
+    EclipticGrid,
+    GalacticGrid,
     Quit,
 }
 
+/// The settings the menu edits.
+pub struct MenuSettings<'a> {
+    pub stars: &'a mut ShowCatalogStars,
+    pub labels: &'a mut LabelSettings,
+    pub sky: &'a mut SkySettings,
+}
+
 impl MenuItem {
-    pub const TOGGLES: [MenuItem; 6] = [
+    pub const TOGGLES: [MenuItem; 10] = [
         MenuItem::CatalogStars,
         MenuItem::Labels,
         MenuItem::PlanetLabels,
         MenuItem::MoonLabels,
         MenuItem::StarLabels,
         MenuItem::StarMagLimit,
+        MenuItem::Constellations,
+        MenuItem::EquatorialGrid,
+        MenuItem::EclipticGrid,
+        MenuItem::GalacticGrid,
     ];
 
-    pub fn text(self, stars: &ShowCatalogStars, labels: &LabelSettings) -> String {
+    pub fn text(
+        self,
+        stars: &ShowCatalogStars,
+        labels: &LabelSettings,
+        sky: &SkySettings,
+    ) -> String {
         match self {
             MenuItem::CatalogStars => checkbox_text(CATALOG_STARS_LABEL, stars.0),
             MenuItem::Labels => checkbox_text("Labels (L)", labels.enabled),
@@ -57,11 +78,16 @@ impl MenuItem {
             MenuItem::StarMagLimit => {
                 format!("  Label stars brighter than mag {}", labels.star_mag_limit)
             }
+            MenuItem::Constellations => checkbox_text("Constellations (C)", sky.constellations),
+            MenuItem::EquatorialGrid => checkbox_text("Equatorial grid", sky.equatorial_grid),
+            MenuItem::EclipticGrid => checkbox_text("Ecliptic grid", sky.ecliptic_grid),
+            MenuItem::GalacticGrid => checkbox_text("Galactic grid", sky.galactic_grid),
             MenuItem::Quit => "Quit".to_string(),
         }
     }
 
-    pub fn apply(self, stars: &mut ShowCatalogStars, labels: &mut LabelSettings) {
+    pub fn apply(self, s: MenuSettings) {
+        let MenuSettings { stars, labels, sky } = s;
         match self {
             MenuItem::CatalogStars => stars.0 = !stars.0,
             MenuItem::Labels => labels.enabled = !labels.enabled,
@@ -69,6 +95,10 @@ impl MenuItem {
             MenuItem::MoonLabels => labels.moons = !labels.moons,
             MenuItem::StarLabels => labels.stars = !labels.stars,
             MenuItem::StarMagLimit => labels.star_mag_limit = labels.next_mag_limit(),
+            MenuItem::Constellations => sky.constellations = !sky.constellations,
+            MenuItem::EquatorialGrid => sky.equatorial_grid = !sky.equatorial_grid,
+            MenuItem::EclipticGrid => sky.ecliptic_grid = !sky.ecliptic_grid,
+            MenuItem::GalacticGrid => sky.galactic_grid = !sky.galactic_grid,
             MenuItem::Quit => {}
         }
     }
@@ -205,13 +235,14 @@ pub fn update_pause_menu_visibility(
 pub fn sync_menu_text(
     stars: Res<ShowCatalogStars>,
     labels: Res<LabelSettings>,
+    sky: Res<SkySettings>,
     mut texts: Query<(&MenuItemText, &mut Text)>,
 ) {
-    if !stars.is_changed() && !labels.is_changed() {
+    if !stars.is_changed() && !labels.is_changed() && !sky.is_changed() {
         return;
     }
     for (item, mut text) in &mut texts {
-        let wanted = item.0.text(&stars, &labels);
+        let wanted = item.0.text(&stars, &labels, &sky);
         if text.0 != wanted {
             text.0 = wanted;
         }
@@ -222,6 +253,7 @@ pub fn handle_menu_buttons(
     mut buttons: Query<(&Interaction, &mut BackgroundColor, &MenuItem), Changed<Interaction>>,
     mut stars: ResMut<ShowCatalogStars>,
     mut labels: ResMut<LabelSettings>,
+    mut sky: ResMut<SkySettings>,
     mut exit: EventWriter<AppExit>,
     menu_open: Res<MenuOpen>,
 ) {
@@ -235,7 +267,11 @@ pub fn handle_menu_buttons(
                 if quit {
                     exit.write(AppExit::Success);
                 }
-                item.apply(&mut stars, &mut labels);
+                item.apply(MenuSettings {
+                    stars: &mut stars,
+                    labels: &mut labels,
+                    sky: &mut sky,
+                });
             }
             Interaction::Hovered => {
                 *color = BackgroundColor(if quit { QUIT_HOVER } else { BUTTON_HOVER });
@@ -268,20 +304,35 @@ mod tests {
     fn test_menu_items_toggle_their_settings() {
         let mut stars = ShowCatalogStars::default();
         let mut labels = LabelSettings::default();
+        let mut sky = SkySettings::default();
         assert_eq!(
-            MenuItem::MoonLabels.text(&stars, &labels),
+            MenuItem::MoonLabels.text(&stars, &labels, &sky),
             "[x]   Moon labels"
         );
-        MenuItem::MoonLabels.apply(&mut stars, &mut labels);
+        MenuItem::MoonLabels.apply(MenuSettings {
+            stars: &mut stars,
+            labels: &mut labels,
+            sky: &mut sky,
+        });
         assert!(!labels.moons);
         assert_eq!(
-            MenuItem::MoonLabels.text(&stars, &labels),
+            MenuItem::MoonLabels.text(&stars, &labels, &sky),
             "[ ]   Moon labels"
         );
-        MenuItem::CatalogStars.apply(&mut stars, &mut labels);
+        MenuItem::CatalogStars.apply(MenuSettings {
+            stars: &mut stars,
+            labels: &mut labels,
+            sky: &mut sky,
+        });
+        MenuItem::GalacticGrid.apply(MenuSettings {
+            stars: &mut stars,
+            labels: &mut labels,
+            sky: &mut sky,
+        });
+        assert!(sky.galactic_grid);
         assert!(!stars.0);
         for item in MenuItem::TOGGLES {
-            assert!(item.text(&stars, &labels).is_ascii());
+            assert!(item.text(&stars, &labels, &sky).is_ascii());
         }
     }
 
@@ -291,6 +342,7 @@ mod tests {
         let mut app = crate::testing::headless_app();
         app.init_resource::<ShowCatalogStars>()
             .init_resource::<LabelSettings>()
+            .init_resource::<SkySettings>()
             .add_systems(Update, sync_menu_text);
         let text = app
             .world_mut()

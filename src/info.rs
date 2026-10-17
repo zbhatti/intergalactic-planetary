@@ -19,6 +19,7 @@ pub enum BodyKind {
     Planet,
     DwarfPlanet,
     Moon,
+    Constellation,
 }
 
 impl BodyKind {
@@ -28,6 +29,7 @@ impl BodyKind {
             BodyKind::Planet => "Planet",
             BodyKind::DwarfPlanet => "Dwarf planet",
             BodyKind::Moon => "Moon",
+            BodyKind::Constellation => "Constellation",
         }
     }
 }
