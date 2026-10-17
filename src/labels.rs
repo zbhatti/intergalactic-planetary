@@ -47,6 +47,8 @@ pub struct LabelSettings {
     /// Planets and dwarf planets.
     pub planets: bool,
     pub moons: bool,
+    /// Asteroids and comets.
+    pub small_bodies: bool,
     pub stars: bool,
     /// Stars are labelled when brighter (smaller) than this apparent magnitude from the camera.
     pub star_mag_limit: f32,
@@ -58,6 +60,7 @@ impl Default for LabelSettings {
             enabled: true,
             planets: true,
             moons: true,
+            small_bodies: true,
             stars: true,
             star_mag_limit: 2.5,
         }
@@ -82,6 +85,7 @@ impl LabelSettings {
                 BodyKind::Star => self.stars,
                 BodyKind::Planet | BodyKind::DwarfPlanet => self.planets,
                 BodyKind::Moon => self.moons,
+                BodyKind::Asteroid | BodyKind::Comet => self.small_bodies,
                 // Shown with the figures (SkySettings); see update_labels.
                 BodyKind::Constellation => true,
             }
@@ -165,7 +169,8 @@ pub struct Candidate {
     pub label: Entity,
     pub anchor: Vec2,
     pub width_px: f32,
-    /// Lower is more important: 0 selected, 1 planets, 2 stars, 3 moons, 4 constellations.
+    /// Lower is more important: 0 selected, 1 planets, 2 stars, 3 moons and small bodies,
+    /// 4 constellations.
     pub tier: u8,
     /// Within a tier, lower first (magnitude for stars, distance otherwise).
     pub key: f32,
@@ -209,7 +214,7 @@ fn tier_and_key(kind: BodyKind, selected: bool, mag: Option<f32>, dist: f64) -> 
     match kind {
         BodyKind::Planet | BodyKind::DwarfPlanet => (1, dist as f32),
         BodyKind::Star => (2, mag.unwrap_or(0.0)),
-        BodyKind::Moon => (3, dist as f32),
+        BodyKind::Moon | BodyKind::Asteroid | BodyKind::Comet => (3, dist as f32),
         BodyKind::Constellation => (4, 0.0),
     }
 }

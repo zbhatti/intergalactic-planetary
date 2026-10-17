@@ -43,3 +43,7 @@ opt-level = 3
 # Keep our own code unoptimized for fast incremental recompiles
 [profile.dev]
 opt-level = 0
+
+# Release binaries ship without debug symbols: 109 MB -> 64 MB on Linux (2026-10-17).
+[profile.release]
+strip = true

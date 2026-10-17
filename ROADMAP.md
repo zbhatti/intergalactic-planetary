@@ -14,13 +14,14 @@ Motion and time simulation come after that. Visual fidelity comes last, because 
 - **Check in SE:** what to look at in SpaceEngine to define "done". Menu/key names are from general
   knowledge of SpaceEngine and should be confirmed against the installed copy before implementing.
 
-## What IP has today
+## What IP has today (end of Phase 2, 2026-10-17)
 
-Free-fly camera (WASD + mouse), speed multiplier up to 10^6 c, Sun + 8 planets as plain spheres at
-fixed 2026-06-25 positions (circular orbits, nothing moves), 58 catalog stars at true RA/Dec/distance
-with luminosity-based brightness and exposure control, 2000 random decorative background stars, name
-labels, search + auto-orient to target, on-screen reticle and off-screen arrow,
-distance/speed/exposure HUD, pause menu, F12 screenshots. Positions are f32 with 1 pc = 1000 units.
+f64 world with a floating origin, adaptive speed and go-to flight from metres to megaparsecs; the
+solar system for 2026-06-25 from JPL elements (planets, dwarf planets, 21 moons, notable asteroids
+and comets); 110k HYG stars plus ~4,000 exoplanet hosts as one instanced starfield; 6,416
+exoplanets; click-select and info panel; solar system, star and location browsers; search; FOV
+zoom; filtered, decluttered labels; coordinate grids and constellation figures; auto-exposure.
+Nothing moves yet (Phase 5). 60 fps on the Intel HD 520 (see PERF.md).
 
 ## Phase 1 — Scale foundation ✅ (2026-10-16)
 
@@ -38,12 +39,12 @@ the real 206,265. Headless tests fly to a body ~5 Mpc away and check arrival and
 | 3 | **Go-to travel**: smooth automatic flight to a selected object, stopping at a sensible viewing distance (log-scale interpolation across huge distances) | Select object → "go to" | Only orients the camera | Low |
 | 4 | **Distance units in HUD up to Mpc/Gly**, and depth range that works from km to Gpc (reverse-Z / per-scale near/far planes) | HUD readout at intergalactic scale | AU/ly/pc only | Low |
 
-## Phase 2 — Real content, local (solar neighbourhood → Milky Way)
+## Phase 2 — Real content, local (solar neighbourhood → Milky Way) ✅ (2026-10-17)
 
 | # | Feature | Check in SE | IP today | GPU |
 |---|---|---|---|---|
 | 5 | ✅ **Selection by clicking** objects/labels + **object info panel** (type, radius, mass, temperature, luminosity, spectral class, distance) | Click object → info panel | Center-crosshair click + I panel. Star temperature derived from L and R | Low |
-| 6 | ✅ **Major moons, dwarf planets, notable small bodies**, parented to their primaries. Static positions at the epoch date until Phase 5 | Solar system browser / planet tree | 21 moons + 5 dwarf planets from JPL elements; also fixed a mirrored sky, planets in the equator plane, and wrong Mercury/Venus/Earth positions. Comets/asteroids still to do | Low |
+| 6 | ✅ **Major moons, dwarf planets, notable small bodies**, parented to their primaries. Static positions at the epoch date until Phase 5 | Solar system browser / planet tree | 21 moons + 5 dwarf planets + 9 asteroids (Vesta, Pallas, Hygiea, Juno, Eros, Itokawa, Ryugu, Bennu, Apophis) + 5 comets (Halley, Encke, Tempel 1, 67P, Wild 2) from JPL elements; also fixed a mirrored sky, planets in the equator plane, and wrong Mercury/Venus/Earth positions | Low |
 | 7 | ✅ **Solar system browser**: tree of star → planets → moons, click to select | Solar system browser window | B opens; keyboard-driven | Low |
 | 8 | ✅ (109k HYG stars in 623 chunk draws at 60 fps on HD 520; 540 named stars searchable; any visible star clickable; sphere proxy within 2000 AU) **Larger star catalog**: HYG (~120k stars) as **one instanced draw with camera-relative positions on the GPU**, not 120k entities. Measured in Phase 1: a full rebase over 120k entities costs 3.4 ms/frame on the i7-6600U. Only the brightest get labels | Night sky density from Earth | 58 stars | Med — profile on iGPU |
 | 9 | ✅ **Exoplanet systems** from the NASA Exoplanet Archive attached to their host stars | Visit a known exoplanet host | 6,416 planets / 4,813 hosts; ~4,000 hosts HYG lacks added to the starfield; planets spawned near their star; measured host radii | Low–Med |

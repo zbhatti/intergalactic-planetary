@@ -97,6 +97,59 @@ const DWARF_PLANETS: &[DwarfRow] = &[
         297.0922733397207, 169.9379962048232, 2461200.5, 112364.8068762869, 715.0, 3.1e21),
 ];
 
+/// Notable asteroids and comets: (name, comet?, a AU, e, i, node, peri, M at epoch, epoch JD,
+/// period days, mean radius km, mass kg or 0 if unknown). Osculating heliocentric ecliptic
+/// J2000 elements from the JPL Small-Body Database API (full precision, fetched 2026-10-17);
+/// radius is half the SBDB diameter, mass is SBDB GM / G. Two-body propagation from each epoch:
+/// fine for a static scene, though comets drift from planetary perturbations over decades.
+type SmallBodyRow = (
+    &'static str,
+    bool,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+);
+
+#[rustfmt::skip]
+const SMALL_BODIES: &[SmallBodyRow] = &[
+    ("Vesta", false, 2.361365965127599, 0.09020374382834395, 7.143925545058711, 103.701293265032,
+        151.4686478221564, 81.19015607686903, 2461200.5, 1325.389042911101, 261.4, 2.590e20),
+    ("Pallas", false, 2.769559010737709, 0.2307000995648547, 34.93279321851542, 172.8866193357694,
+        310.9699161652136, 254.2496521742734, 2461200.5, 1683.504809564834, 256.5, 2.042e20),
+    ("Hygiea", false, 3.150974033963701, 0.1067092741240963, 3.829529946447122, 283.1198927508594,
+        312.4242387344704, 252.0344242359649, 2461200.5, 2042.987283349627, 203.6, 1.049e20),
+    ("Juno", false, 2.670989527103278, 0.2556999836681878, 12.98659236598085, 169.8115953492418,
+        247.8950743075613, 262.7322944883855, 2461200.5, 1594.434579527149, 123.3, 0.0),
+    ("Eros", false, 1.458243716760167, 0.2228779627700761, 10.82854410314273, 304.2679713350896,
+        178.9181319135911, 62.51145501986792, 2461200.5, 643.1963890927677, 8.42, 6.687e15),
+    ("Itokawa", false, 1.324052284342771, 0.2801776414987972, 1.620940810523569, 69.07449749929083,
+        162.8409022415483, 170.653905937934, 2461200.5, 556.4884171058932, 0.165, 3.15e10),
+    ("Ryugu", false, 1.190918932702464, 0.1910730046480051, 5.866442486408568, 251.2897123995624,
+        211.608993811871, 62.34067409463987, 2461200.5, 474.7027265420688, 0.448, 4.49e11),
+    ("Bennu", false, 1.126391025894812, 0.2037450762416414, 6.03494377024794, 2.06086619569642,
+        66.22306084084298, 101.703952002457, 2455562.5, 436.6487281120201, 0.242, 7.33e10),
+    ("Apophis", false, 0.9223592206975018, 0.1911492279663492, 3.340996879880978, 203.8936514240762,
+        126.6795706895841, 175.3304026592739, 2461200.5, 323.5553366891694, 0.17, 0.0),
+    ("1P/Halley", true, 17.92863504856923, 0.9679359956953211, 162.1905300439129, 59.09894720612437,
+        112.2414314637764, 274.3823371366792, 2439875.5, 27728.04608790421, 5.5, 0.0),
+    ("2P/Encke", true, 2.218624763741819, 0.846940430888432, 11.33675914978793, 334.0171400057891,
+        187.2881998732444, 36.82518175471338, 2460363.5, 1207.047083758139, 2.4, 0.0),
+    ("9P/Tempel 1", true, 3.146133758958915, 0.5097028326964878, 10.4734281543904, 68.75357468050096,
+        179.1972753698572, 336.5854438553629, 2457470.5, 2038.281680411032, 3.0, 0.0),
+    ("67P/Churyumov-Gerasimenko", true, 3.462249490129549, 0.6409081308996354, 7.040294937543767,
+        50.13557377155012, 12.79824970228189, 8.859927425218402, 2457305.5, 2353.076067903661, 1.7,
+        9.92e12),
+    ("81P/Wild 2", true, 3.449745576963111, 0.5373989073846863, 3.237004173608168, 136.1102208500619,
+        41.72523085114398, 187.5966814232084, 2458808.5, 2340.340383523585, 2.0, 0.0),
+];
+
 // Reference-plane poles (RA, Dec in degrees). Laplace poles from the JPL satellite table;
 // Uranus and Pluto equators from the IAU WGCCRE 2015 pole directions.
 const MARS_LAPLACE: (f64, f64) = (317.7, 52.9);
@@ -346,6 +399,62 @@ pub fn setup_solar_system(
         spawned.push((name, pos, e));
     }
 
+    let asteroid_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.50, 0.47, 0.43),
+        ..default()
+    });
+    let comet_mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.75, 0.80, 0.85),
+        ..default()
+    });
+    for &(name, comet, a, e, i, node, peri, m0, epoch, period, radius_km, mass_kg) in SMALL_BODIES {
+        let el = Elements {
+            a_au: a,
+            e,
+            i_deg: i,
+            node_deg: node,
+            peri_deg: peri,
+            m0_deg: m0,
+            epoch_jd: epoch,
+            period_days: period,
+            plane: RefPlane::Ecliptic,
+        };
+        let mut facts = if mass_kg > 0.0 {
+            physical_facts(mass_kg, radius_km)
+        } else {
+            vec![("Mass", "unknown".to_string())]
+        };
+        facts.push(("Orbit (semi-major axis)", format!("{a:.3} AU")));
+        facts.push(("Eccentricity", format!("{e:.3}")));
+        facts.push(("Perihelion", format!("{:.3} AU", a * (1.0 - e))));
+        facts.push((
+            "Orbital period",
+            format!("{} years", format_sig(period / 365.25)),
+        ));
+        sp.body(
+            el.position_world(SCENE_JD),
+            radius_km,
+            if comet {
+                comet_mat.clone()
+            } else {
+                asteroid_mat.clone()
+            },
+            BodyInfo {
+                name: name.into(),
+                kind: if comet {
+                    BodyKind::Comet
+                } else {
+                    BodyKind::Asteroid
+                },
+                facts,
+            },
+            Some(OrbitOf {
+                primary: sun,
+                a_au: a,
+            }),
+        );
+    }
+
     let moon_mat = materials.add(StandardMaterial {
         base_color: Color::srgb(0.62, 0.62, 0.60),
         ..default()
@@ -466,6 +575,37 @@ mod tests {
         assert!((34.0..36.5).contains(&pluto), "Pluto at {pluto} AU");
         let eris = dwarf_pos("Eris").length();
         assert!((94.0..97.5).contains(&eris), "Eris at {eris} AU");
+    }
+
+    fn small_body_pos(name: &str) -> DVec3 {
+        let &(_, _, a, e, i, node, peri, m0, epoch, period, ..) =
+            SMALL_BODIES.iter().find(|b| b.0 == name).unwrap();
+        Elements {
+            a_au: a,
+            e,
+            i_deg: i,
+            node_deg: node,
+            peri_deg: peri,
+            m0_deg: m0,
+            epoch_jd: epoch,
+            period_days: period,
+            plane: RefPlane::Ecliptic,
+        }
+        .position_world(SCENE_JD)
+    }
+
+    #[test]
+    fn test_small_body_positions_in_2026() {
+        // Halley passed aphelion (35.1 AU) in Dec 2023, so it's still ~35 AU out.
+        let halley = small_body_pos("1P/Halley").length();
+        assert!((33.0..35.5).contains(&halley), "Halley at {halley} AU");
+        // Main-belt asteroids stay between perihelion and aphelion.
+        for (name, q, big_q) in [("Vesta", 2.14, 2.58), ("Pallas", 2.13, 3.41)] {
+            let r = small_body_pos(name).length();
+            assert!((q..big_q).contains(&r), "{name} at {r} AU");
+        }
+        // Halley's orbit is retrograde: i = 162 deg.
+        assert!(SMALL_BODIES.iter().all(|b| b.0.is_ascii()));
     }
 
     #[test]

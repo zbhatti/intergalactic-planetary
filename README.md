@@ -12,7 +12,7 @@ supercluster).
   up to megaparsecs. Speed adapts to the distance from the nearest surface.
 - **Go-to flight**: select anything, press G, and you fly there in seconds whatever the distance.
 - **Solar system** placed for 2026-06-25 from NASA/JPL orbital elements: 8 planets, 5 dwarf
-  planets, 21 major moons.
+  planets, 21 major moons, 9 notable asteroids and 5 comets (Halley is out near aphelion, ~35 AU).
 - **109k catalog stars** drawn as one instanced point cloud. Any visible star can be clicked, and
   the 540 named ones can be searched for. Close up (< 2000 AU), the nearest star becomes a sphere.
 - **6,400 exoplanets** in 4,800 systems from the NASA Exoplanet Archive: search a host or planet
