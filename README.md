@@ -19,6 +19,8 @@ supercluster).
   **search**.
 - **Zoom**: mouse wheel, from 120 deg down to 0.01 deg. Stars keep their size in pixels, like a
   telescope.
+- **Sky overlays**: the 88 IAU constellation figures (C), which distort as you fly away from home
+  because their stars are at real distances, and equatorial/ecliptic/galactic grids (Esc menu).
 - **Labels**, filtered by type and by star brightness from where you are, and decluttered.
   Labels never overlap each other or the HUD, and they hide behind planets.
 
@@ -35,6 +37,7 @@ supercluster).
 | I | Show/hide the info panel |
 | B | Solar system browser |
 | L | Labels on/off (per-type filters in the Esc menu) |
+| C | Constellation figures and names |
 | Enter | Search (arrows to pick, Enter to select, Esc to close) |
 | `[` / `]` | Exposure down / up |
 | Esc | Pause menu (labels, star catalog, quit) |
@@ -71,4 +74,4 @@ and results.
 
 ## Data
 
-Star positions come from the [HYG Database](https://codeberg.org/astronexus/hyg) v4.4 (c) astronexus.com, CC BY-SA 4.0. Solar system orbits come from NASA/JPL. See [DATA_LICENSES.md](DATA_LICENSES.md).
+Star positions come from the [HYG Database](https://codeberg.org/astronexus/hyg) v4.4 (c) astronexus.com, CC BY-SA 4.0. Constellation figures come from [Stellarium](https://github.com/Stellarium/stellarium)'s modern sky culture, CC BY-SA 4.0. Solar system orbits come from NASA/JPL. See [DATA_LICENSES.md](DATA_LICENSES.md).

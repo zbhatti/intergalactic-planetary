@@ -108,11 +108,15 @@ fn star_body(catalog: &HygCatalog, i: usize, name: String) -> (BodyInfo, f64, f6
         ),
         (
             "Distance from Sun",
-            format!(
-                "{:.2} pc ({:.1} ly)",
-                dist_pc,
-                dist_pc * AU_PER_PC / AU_PER_LY
-            ),
+            if s.dist_known {
+                format!(
+                    "{:.2} pc ({:.1} ly)",
+                    dist_pc,
+                    dist_pc * AU_PER_PC / AU_PER_LY
+                )
+            } else {
+                format!("unknown (no parallax; shown at {dist_pc:.0} pc)")
+            },
         ),
         (
             "Radius source",

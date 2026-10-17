@@ -49,7 +49,7 @@ the real 206,265. Headless tests fly to a body ~5 Mpc away and check arrival and
 | 9 | **Exoplanet systems** from the NASA Exoplanet Archive attached to their host stars | Visit a known exoplanet host | None | Low–Med |
 | 10 | ✅ **Field of view zoom** (mouse wheel), FOV in HUD | Zoom in on a distant object | 120 deg to 0.01 deg; points keep their pixel size; look sensitivity scales | Low |
 | 11 | ✅ **Label/marker filtering** by type and by distance/brightness — essential once there are 10^5+ objects | Label/marker settings | Type toggles + star magnitude limit (Esc menu), L on/off, declutter, hidden behind planets, moons appear once separated from their planet | Low |
-| 12 | **Coordinate grids and constellation lines** (equatorial/ecliptic/galactic, IAU lines) | Grid and constellation toggles | None | Low (gizmos) |
+| 12 | ✅ **Coordinate grids and constellation lines** (equatorial/ecliptic/galactic, IAU lines) | Grid and constellation toggles | 3 grids + 88 figures (Stellarium, CC BY-SA) between real 3D star positions; names as labels; 430 bright no-parallax stars added to the catalog so every figure resolves | Low (gizmos) |
 | 13 | **Star browser**: nearest/brightest stars around the camera, sortable, click to go | Star browser window | None | Low |
 | 14 | **Bookmarks / saved locations** (position, orientation, target) | Locations / bookmarks | None | Low |
 | 14a | **Auto-exposure** (eye adaptation from the brightest visible flux, computed on the CPU) to replace the fixed close-range brightness cap | Approach a star: the sky dims, then the star's disk becomes visible | Manual EV + cap | Low |

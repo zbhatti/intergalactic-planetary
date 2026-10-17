@@ -2,7 +2,8 @@
 //!
 //! Each labelled object has one UI text entity (with [`LabelFor`]). Every frame the candidates
 //! are projected to the screen and filtered:
-//! - by type ([`LabelSettings`]: planets and dwarf planets, moons, stars);
+//! - by type ([`LabelSettings`]: planets and dwarf planets, moons, stars; constellation names
+//!   follow the figures in [`SkySettings`]);
 //! - stars by apparent magnitude from the camera (brighter than `star_mag_limit`);
 //! - an orbiting body only once it's [`MIN_PRIMARY_SEP_PX`] away from its primary on screen, so
 //!   moons appear as you zoom in or approach and don't pile up on their planet from afar;
@@ -19,6 +20,7 @@ use crate::coords::{BodyRadius, NavSet, WorldPos};
 use crate::info::{BodyInfo, BodyKind, disk_radius_px};
 use crate::menu::MenuOpen;
 use crate::search::Search;
+use crate::sky::SkySettings;
 use crate::solar_system::OrbitOf;
 use crate::zoom::CameraFov;
 use bevy::math::DVec3;
@@ -80,6 +82,8 @@ impl LabelSettings {
                 BodyKind::Star => self.stars,
                 BodyKind::Planet | BodyKind::DwarfPlanet => self.planets,
                 BodyKind::Moon => self.moons,
+                // Shown with the figures (SkySettings); see update_labels.
+                BodyKind::Constellation => true,
             }
     }
 }
@@ -101,6 +105,15 @@ pub struct LabelLum(pub f32);
 
 /// Spawns the (initially hidden) label for `target`.
 pub fn spawn_label(commands: &mut Commands, target: Entity, name: &str) -> Entity {
+    spawn_label_colored(commands, target, name, Color::srgba(1.0, 0.9, 0.7, 0.85))
+}
+
+pub fn spawn_label_colored(
+    commands: &mut Commands,
+    target: Entity,
+    name: &str,
+    color: Color,
+) -> Entity {
     commands
         .spawn((
             LabelFor {
@@ -112,7 +125,7 @@ pub fn spawn_label(commands: &mut Commands, target: Entity, name: &str) -> Entit
                 font_size: LABEL_FONT_SIZE,
                 ..default()
             },
-            TextColor(Color::srgba(1.0, 0.9, 0.7, 0.85)),
+            TextColor(color),
             Node {
                 position_type: PositionType::Absolute,
                 display: Display::None,
@@ -152,7 +165,7 @@ pub struct Candidate {
     pub label: Entity,
     pub anchor: Vec2,
     pub width_px: f32,
-    /// Lower is more important: 0 selected, 1 planets, 2 stars, 3 moons.
+    /// Lower is more important: 0 selected, 1 planets, 2 stars, 3 moons, 4 constellations.
     pub tier: u8,
     /// Within a tier, lower first (magnitude for stars, distance otherwise).
     pub key: f32,
@@ -197,6 +210,7 @@ fn tier_and_key(kind: BodyKind, selected: bool, mag: Option<f32>, dist: f64) -> 
         BodyKind::Planet | BodyKind::DwarfPlanet => (1, dist as f32),
         BodyKind::Star => (2, mag.unwrap_or(0.0)),
         BodyKind::Moon => (3, dist as f32),
+        BodyKind::Constellation => (4, 0.0),
     }
 }
 
@@ -212,6 +226,7 @@ type ObjectQuery<'a> = (
 #[allow(clippy::too_many_arguments)]
 pub fn update_labels(
     settings: Res<LabelSettings>,
+    sky: Res<SkySettings>,
     search: Res<Search>,
     fov: Res<CameraFov>,
     cam: Query<(&WorldPos, &Transform), With<FlyCam>>,
@@ -254,6 +269,9 @@ pub fn update_labels(
             };
             let selected = search.target == Some(e);
             if !selected && !settings.shows(info.kind) {
+                continue;
+            }
+            if info.kind == BodyKind::Constellation && !sky.constellations {
                 continue;
             }
             let dist = pos.0.distance(cam_pos.0);
@@ -485,6 +503,7 @@ mod tests {
     fn scene() -> Scene {
         let mut app = crate::testing::headless_app();
         app.init_resource::<LabelSettings>()
+            .init_resource::<SkySettings>()
             .init_resource::<Search>()
             .init_resource::<CameraFov>()
             .add_systems(Update, update_labels);
