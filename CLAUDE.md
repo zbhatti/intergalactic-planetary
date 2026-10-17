@@ -92,6 +92,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `zoom.rs` | Mouse-wheel FOV (`CameraFov`), `min_star_angle(fov)` keeps points the same pixel size at any zoom |
 | `labels.rs` | Name labels: type/magnitude filters (`LabelSettings`), primary-separation rule for moons, occlusion by planet disks, greedy declutter, HUD avoidance (`LabelBlocker`) |
 | `sky.rs` | Equatorial/ecliptic/galactic grids and 88 constellation figures (Stellarium data, HIP -> HYG), gizmo lines on a 1000 AU sphere around the camera; C toggles figures |
+| `auto_exposure.rs` | Eye adaptation: darkens (never brightens past the manual EV) so the brightest star in view sits at `TARGET_PEAK`; `\` toggles |
 | `ui.rs` | Distance/speed/exposure HUD labels, `format_distance`, `format_speed` |
 | `navigation.rs` | HUD reticle, off-screen arrow gizmo, camera auto-orient |
 | `menu.rs` | Esc pause menu: data-driven `MenuItem` toggles whose text is regenerated from the settings |
@@ -113,6 +114,7 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | N | Star browser: nearest stars, Tab for brightest from here |
 | K | Locations: Enter saves the current view / jumps to a saved one, Delete removes |
 | `[` / `]` | Decrease / increase exposure (EV-5 to EV+20) |
+| `\` | Auto-exposure on/off (on by default) |
 | Enter | Open object search |
 | Arrow Up/Down | Navigate search results |
 | Enter (in search) | Select object, orient camera toward it |
@@ -199,10 +201,15 @@ Without this filter the system won't compile.
 - Events use `.write()` not `.send()` (e.g., `exit.write(AppExit::Success)`).
 - `MeshMaterial3d<M>` is a newtype: access the handle via `.0`.
 
-### 9. Close-range star brightness is capped
+### 9. Close-range stars: resolved disks, auto-exposure, then the cap
 
-Point-source brightness (`L / d²`) reaches ~1e10 within a few AU of a star, and bloom then whites out the screen.
-`star_brightness` caps it at `MAX_STAR_BRIGHTNESS` (30). Remove the cap only together with real auto-exposure.
+Sphere stars use `sphere_brightness`: the point law `L / d²` while the drawn disk is the minimum
+point size, then the constant surface brightness `L / R²` once the real disk is bigger. Don't
+reintroduce a plain distance clamp for spheres: a 20 AU clamp once made the Sun look the same from
+Mercury as from Uranus. Auto-exposure (`auto_exposure.rs`) then darkens the view so the brightest
+star in view sits at `TARGET_PEAK`; at the Sun that's about EV -30.6, which is why the rest of
+the sky goes black there. `MAX_STAR_BRIGHTNESS` (30) is only a backstop for auto-off. The Sun has
+a `Star` component and follows the same model.
 
 ### 11. Catalog stars: points far, spheres near
 
@@ -240,10 +247,11 @@ first (see `PERF.md`).
 ## Brightness model
 
 ```
-emissive = 2^EV × 0.5 × luminosity_solar / dist_pc²
+emissive = 2^(EV + auto) × 0.4 × visual_luminosity_solar / dist_pc²        (unresolved)
+         = 2^(EV + auto) × 0.4 × L × (AU_PER_PC × min_angle / R_au)²       (resolved disk)
 ```
 
-- `BRIGHTNESS_SCALE = 0.5` calibrated so Vega (L=40.12 L☉, d=7.68 pc) ≈ emissive 0.34 at EV 0.
+- `BRIGHTNESS_SCALE = 0.4`; Sirius from Earth is ~1.4 at EV 0, under auto-exposure's target of 2.
 - Spectral color (from `spectral_color`) is applied as a tint multiplied by brightness.
 - Distance is clamped to a minimum of 1e-4 pc, and the result is capped at `MAX_STAR_BRIGHTNESS` (see gotcha 9).
 - Exposure range: EV -5 (dim) to EV +20 (very sensitive). Each step doubles/halves all star brightness.

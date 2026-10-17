@@ -22,6 +22,8 @@ supercluster).
   telescope.
 - **Sky overlays**: the 88 IAU constellation figures (C), which distort as you fly away from home
   because their stars are at real distances, and equatorial/ecliptic/galactic grids (Esc menu).
+- **Auto-exposure**: approach a star and the sky dims until its disk is visible, as for an eye or
+  camera. It never brightens past your manual exposure.
 - **Labels**, filtered by type and by star brightness from where you are, and decluttered.
   Labels never overlap each other or the HUD, and they hide behind planets.
 
@@ -43,6 +45,7 @@ supercluster).
 | C | Constellation figures and names |
 | Enter | Search (arrows to pick, Enter to select, Esc to close) |
 | `[` / `]` | Exposure down / up |
+| `\` | Auto-exposure on/off |
 | Esc | Pause menu (labels, star catalog, quit) |
 | F3 / F12 | Performance overlay / screenshot |
 

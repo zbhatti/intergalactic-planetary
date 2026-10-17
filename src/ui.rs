@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn test_exposure_text_shows_fov() {
         let t = exposure_text(&ExposureSettings::default(), CameraFov::default());
-        assert_eq!(t, "FOV 45 deg  EV+0 [ / ]");
+        assert_eq!(t, "FOV 45 deg  EV+0 auto [ / ]");
     }
 
     #[test]

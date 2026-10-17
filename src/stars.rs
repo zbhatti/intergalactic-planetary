@@ -18,12 +18,43 @@ pub const SOLAR_RADIUS_UNITS: f64 = 695_700.0 / KM_PER_AU;
 // Calibrated so Vega (visual L≈50 from HYG, d=7.68 pc) ≈ 0.34 at EV 0 (bright but not blown out)
 pub const BRIGHTNESS_SCALE: f32 = 0.4;
 
-// Ceiling on a star's emissive brightness. Point-source 1/d^2 brightness reaches ~1e10 within
-// a few AU of a star; with bloom that whites out the whole screen on arrival. Capped, a close
-// star reads as a bright disk with a modest glow. (Proper fix: auto-exposure, see ROADMAP.)
+// Ceiling on a star's emissive brightness, a backstop. Auto-exposure normally keeps the brightest
+// object in view well below it; with auto off, a close star still can't white out the screen.
 pub const MAX_STAR_BRIGHTNESS: f32 = 30.0;
-/// Distance clamp for the 1/d^2 brightness law, parsecs.
-pub const MIN_BRIGHTNESS_DIST_PC: f32 = 1e-4;
+/// Distance clamp for the 1/d^2 law of unresolved points, parsecs (~0.2 AU). Resolved spheres
+/// don't need it (see `sphere_brightness_raw`). It was 1e-4 pc (20 AU) before auto-exposure,
+/// which made the Sun no brighter from Mercury than from Uranus.
+pub const MIN_BRIGHTNESS_DIST_PC: f32 = 1e-6;
+
+/// Brightness per pixel of a star drawn at `star_visual_radius`, before the cap: its flux spread
+/// over the drawn disk. Far away the disk is the minimum point size, so this is the point law
+/// `L / d^2`. Once the real disk is bigger, the same light covers more pixels: brightness becomes
+/// the surface brightness `L / R^2`, which doesn't change as you approach, as physically it doesn't.
+pub fn sphere_brightness_raw(
+    ev_factor: f32,
+    luminosity_solar: f32,
+    radius_au: f64,
+    dist_au: f64,
+    min_angle: f32,
+) -> f32 {
+    let min_dist_au = MIN_BRIGHTNESS_DIST_PC as f64 * AU_PER_PC;
+    let point_radius = dist_au.max(min_dist_au) * min_angle as f64;
+    let drawn = point_radius.max(radius_au);
+    let per_area = (AU_PER_PC * min_angle as f64 / drawn).powi(2);
+    (ev_factor as f64 * BRIGHTNESS_SCALE as f64 * luminosity_solar as f64 * per_area) as f32
+}
+
+/// [`sphere_brightness_raw`], capped at [`MAX_STAR_BRIGHTNESS`].
+pub fn sphere_brightness(
+    ev_factor: f32,
+    luminosity_solar: f32,
+    radius_au: f64,
+    dist_au: f64,
+    min_angle: f32,
+) -> f32 {
+    sphere_brightness_raw(ev_factor, luminosity_solar, radius_au, dist_au, min_angle)
+        .min(MAX_STAR_BRIGHTNESS)
+}
 
 pub fn star_brightness(ev_factor: f32, luminosity_solar: f32, dist_pc: f32) -> f32 {
     let dist_pc = dist_pc.max(MIN_BRIGHTNESS_DIST_PC);
@@ -136,21 +167,52 @@ pub fn match_curated(catalog: &HygCatalog) -> Vec<Option<usize>> {
         .collect()
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource, Debug, Clone, PartialEq)]
 pub struct ExposureSettings {
+    /// Manual exposure (`[` / `]`).
     pub ev: i32,
+    /// Auto-exposure on (`\\` key, Esc menu). It only ever darkens: see `auto_exposure.rs`.
+    pub auto: bool,
+    /// Current auto-exposure adjustment, EV, <= 0. Ignored when `auto` is off.
+    pub auto_offset: f32,
+}
+
+impl Default for ExposureSettings {
+    fn default() -> Self {
+        Self {
+            ev: 0,
+            auto: true,
+            auto_offset: 0.0,
+        }
+    }
 }
 
 impl ExposureSettings {
     const MIN_EV: i32 = -5;
     const MAX_EV: i32 = 20;
 
+    /// Effective exposure: manual EV plus the auto adjustment.
+    pub fn effective_ev(&self) -> f32 {
+        self.ev as f32 + if self.auto { self.auto_offset } else { 0.0 }
+    }
+
     pub fn factor(&self) -> f32 {
+        2f32.powf(self.effective_ev())
+    }
+
+    /// The manual setting alone (what auto-exposure measures against).
+    pub fn manual_factor(&self) -> f32 {
         2f32.powi(self.ev)
     }
 
     pub fn label(&self) -> String {
-        format!("EV{:+}", self.ev)
+        if !self.auto {
+            format!("EV{:+}", self.ev)
+        } else if self.auto_offset > -0.05 {
+            format!("EV{:+} auto", self.ev)
+        } else {
+            format!("EV{:+} auto{:.1}", self.ev, self.auto_offset)
+        }
     }
 }
 
@@ -251,7 +313,9 @@ pub fn update_star_brightness(
 
     for (pos, mut transform, mat_handle, mut star) in star_query.iter_mut() {
         let dist_au = pos.0.distance(cam.0);
-        let brightness = star_brightness(ev_factor, star.visual_lum, (dist_au / AU_PER_PC) as f32);
+        let radius_au = star.radius_solar as f64 * SOLAR_RADIUS_UNITS;
+        let brightness =
+            sphere_brightness(ev_factor, star.visual_lum, radius_au, dist_au, min_angle);
         if (brightness / star.last_brightness.max(f32::MIN_POSITIVE) - 1.0).abs() > 0.01 {
             star.last_brightness = brightness;
             let base = spectral_color(star.spectral);
@@ -295,6 +359,9 @@ pub fn adjust_exposure(
     }
     if keys.just_pressed(KeyCode::BracketRight) {
         exposure.ev = (exposure.ev + 1).min(ExposureSettings::MAX_EV);
+    }
+    if keys.just_pressed(KeyCode::Backslash) {
+        exposure.auto = !exposure.auto;
     }
 }
 
@@ -506,18 +573,58 @@ mod tests {
         assert_eq!(matches[0], hyg.index_of_name("Sirius"));
     }
 
+    fn manual(ev: i32) -> ExposureSettings {
+        ExposureSettings {
+            ev,
+            auto: false,
+            auto_offset: 0.0,
+        }
+    }
+
+    #[test]
+    fn test_auto_offset_applies_only_when_auto_is_on() {
+        let mut e = ExposureSettings {
+            ev: 2,
+            auto: true,
+            auto_offset: -10.5,
+        };
+        assert_eq!(e.effective_ev(), -8.5);
+        assert_eq!(e.manual_factor(), 4.0);
+        assert_eq!(e.label(), "EV+2 auto-10.5");
+        e.auto = false;
+        assert_eq!(e.factor(), 4.0);
+        assert_eq!(e.label(), "EV+2");
+        assert!(ExposureSettings::default().auto);
+        assert_eq!(ExposureSettings::default().label(), "EV+0 auto");
+    }
+
+    #[test]
+    fn test_resolved_disks_conserve_flux() {
+        let r = SOLAR_RADIUS_UNITS;
+        let raw = |d: f64| sphere_brightness_raw(1.0, 1.0, r, d, MIN_STAR_ANGLE) as f64;
+        // Far away it's the point law: 4x the distance, 1/16 the brightness.
+        assert!((raw(10.0) / raw(40.0) - 16.0).abs() < 1e-6);
+        // Once resolved (here, closer than ~2.3 AU), the surface brightness is constant all the way
+        // down to the surface, with no distance clamp kicking in.
+        assert!((raw(1.0) / raw(0.006) - 1.0).abs() < 1e-6);
+        // And continuous where the drawn disk switches from the point size to the real one.
+        let d_switch = r / MIN_STAR_ANGLE as f64;
+        assert!((raw(d_switch * 0.999) / raw(d_switch * 1.001) - 1.0).abs() < 1e-2);
+        assert!(sphere_brightness(1.0, 1.0, r, 0.01, MIN_STAR_ANGLE) <= MAX_STAR_BRIGHTNESS);
+    }
+
     #[test]
     fn test_exposure_factor_doubles_per_ev() {
-        let e0 = ExposureSettings { ev: 0 };
-        let e1 = ExposureSettings { ev: 1 };
+        let e0 = manual(0);
+        let e1 = manual(1);
         assert!((e1.factor() / e0.factor() - 2.0).abs() < 0.001);
     }
 
     #[test]
     fn test_exposure_label_format() {
-        assert_eq!(ExposureSettings { ev: 4 }.label(), "EV+4");
-        assert_eq!(ExposureSettings { ev: -2 }.label(), "EV-2");
-        assert_eq!(ExposureSettings { ev: 0 }.label(), "EV+0");
+        assert_eq!(manual(4).label(), "EV+4");
+        assert_eq!(manual(-2).label(), "EV-2");
+        assert_eq!(manual(0).label(), "EV+0");
     }
 
     #[test]
@@ -527,9 +634,7 @@ mod tests {
 
     #[test]
     fn test_exposure_clamps_at_min() {
-        let mut e = ExposureSettings {
-            ev: ExposureSettings::MIN_EV,
-        };
+        let mut e = manual(ExposureSettings::MIN_EV);
         e.ev = (e.ev - 1).max(ExposureSettings::MIN_EV);
         assert_eq!(
             e.ev,
@@ -540,9 +645,7 @@ mod tests {
 
     #[test]
     fn test_exposure_clamps_at_max() {
-        let mut e = ExposureSettings {
-            ev: ExposureSettings::MAX_EV,
-        };
+        let mut e = manual(ExposureSettings::MAX_EV);
         e.ev = (e.ev + 1).min(ExposureSettings::MAX_EV);
         assert_eq!(
             e.ev,

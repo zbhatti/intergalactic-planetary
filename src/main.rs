@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use coords::NavSet;
 
+mod auto_exposure;
 mod browser;
 mod camera;
 mod constants;
@@ -55,6 +56,7 @@ fn main() {
             zoom::ZoomPlugin,
             labels::LabelsPlugin,
             sky::SkyPlugin,
+            auto_exposure::AutoExposurePlugin,
             star_browser::StarBrowserPlugin,
             locations::LocationsPlugin,
         ))
