@@ -2,6 +2,7 @@ use crate::camera::CursorLocked;
 use crate::labels::LabelSettings;
 use crate::search::Search;
 use crate::sky::SkySettings;
+use crate::stars::ExposureSettings;
 use bevy::{app::AppExit, prelude::*, window::CursorGrabMode};
 
 #[derive(Resource, Default)]
@@ -39,6 +40,7 @@ pub enum MenuItem {
     EquatorialGrid,
     EclipticGrid,
     GalacticGrid,
+    AutoExposure,
     Quit,
 }
 
@@ -47,10 +49,11 @@ pub struct MenuSettings<'a> {
     pub stars: &'a mut ShowCatalogStars,
     pub labels: &'a mut LabelSettings,
     pub sky: &'a mut SkySettings,
+    pub exposure: &'a mut ExposureSettings,
 }
 
 impl MenuItem {
-    pub const TOGGLES: [MenuItem; 10] = [
+    pub const TOGGLES: [MenuItem; 11] = [
         MenuItem::CatalogStars,
         MenuItem::Labels,
         MenuItem::PlanetLabels,
@@ -61,6 +64,7 @@ impl MenuItem {
         MenuItem::EquatorialGrid,
         MenuItem::EclipticGrid,
         MenuItem::GalacticGrid,
+        MenuItem::AutoExposure,
     ];
 
     pub fn text(
@@ -68,6 +72,7 @@ impl MenuItem {
         stars: &ShowCatalogStars,
         labels: &LabelSettings,
         sky: &SkySettings,
+        exposure: &ExposureSettings,
     ) -> String {
         match self {
             MenuItem::CatalogStars => checkbox_text(CATALOG_STARS_LABEL, stars.0),
@@ -82,12 +87,18 @@ impl MenuItem {
             MenuItem::EquatorialGrid => checkbox_text("Equatorial grid", sky.equatorial_grid),
             MenuItem::EclipticGrid => checkbox_text("Ecliptic grid", sky.ecliptic_grid),
             MenuItem::GalacticGrid => checkbox_text("Galactic grid", sky.galactic_grid),
+            MenuItem::AutoExposure => checkbox_text("Auto exposure (\\)", exposure.auto),
             MenuItem::Quit => "Quit".to_string(),
         }
     }
 
     pub fn apply(self, s: MenuSettings) {
-        let MenuSettings { stars, labels, sky } = s;
+        let MenuSettings {
+            stars,
+            labels,
+            sky,
+            exposure,
+        } = s;
         match self {
             MenuItem::CatalogStars => stars.0 = !stars.0,
             MenuItem::Labels => labels.enabled = !labels.enabled,
@@ -99,6 +110,7 @@ impl MenuItem {
             MenuItem::EquatorialGrid => sky.equatorial_grid = !sky.equatorial_grid,
             MenuItem::EclipticGrid => sky.ecliptic_grid = !sky.ecliptic_grid,
             MenuItem::GalacticGrid => sky.galactic_grid = !sky.galactic_grid,
+            MenuItem::AutoExposure => exposure.auto = !exposure.auto,
             MenuItem::Quit => {}
         }
     }
@@ -236,13 +248,18 @@ pub fn sync_menu_text(
     stars: Res<ShowCatalogStars>,
     labels: Res<LabelSettings>,
     sky: Res<SkySettings>,
+    exposure: Res<ExposureSettings>,
     mut texts: Query<(&MenuItemText, &mut Text)>,
+    mut last_auto: Local<Option<bool>>,
 ) {
-    if !stars.is_changed() && !labels.is_changed() && !sky.is_changed() {
+    // Exposure changes every frame while auto-exposure adapts; only the on/off matters here.
+    let exposure_toggled = exposure.is_changed() && *last_auto != Some(exposure.auto);
+    *last_auto = Some(exposure.auto);
+    if !stars.is_changed() && !labels.is_changed() && !sky.is_changed() && !exposure_toggled {
         return;
     }
     for (item, mut text) in &mut texts {
-        let wanted = item.0.text(&stars, &labels, &sky);
+        let wanted = item.0.text(&stars, &labels, &sky, &exposure);
         if text.0 != wanted {
             text.0 = wanted;
         }
@@ -254,6 +271,7 @@ pub fn handle_menu_buttons(
     mut stars: ResMut<ShowCatalogStars>,
     mut labels: ResMut<LabelSettings>,
     mut sky: ResMut<SkySettings>,
+    mut exposure: ResMut<ExposureSettings>,
     mut exit: EventWriter<AppExit>,
     menu_open: Res<MenuOpen>,
 ) {
@@ -271,6 +289,7 @@ pub fn handle_menu_buttons(
                     stars: &mut stars,
                     labels: &mut labels,
                     sky: &mut sky,
+                    exposure: &mut exposure,
                 });
             }
             Interaction::Hovered => {
@@ -305,34 +324,38 @@ mod tests {
         let mut stars = ShowCatalogStars::default();
         let mut labels = LabelSettings::default();
         let mut sky = SkySettings::default();
+        let mut exposure = ExposureSettings::default();
         assert_eq!(
-            MenuItem::MoonLabels.text(&stars, &labels, &sky),
+            MenuItem::MoonLabels.text(&stars, &labels, &sky, &exposure),
             "[x]   Moon labels"
         );
         MenuItem::MoonLabels.apply(MenuSettings {
             stars: &mut stars,
             labels: &mut labels,
             sky: &mut sky,
+            exposure: &mut exposure,
         });
         assert!(!labels.moons);
         assert_eq!(
-            MenuItem::MoonLabels.text(&stars, &labels, &sky),
+            MenuItem::MoonLabels.text(&stars, &labels, &sky, &exposure),
             "[ ]   Moon labels"
         );
         MenuItem::CatalogStars.apply(MenuSettings {
             stars: &mut stars,
             labels: &mut labels,
             sky: &mut sky,
+            exposure: &mut exposure,
         });
         MenuItem::GalacticGrid.apply(MenuSettings {
             stars: &mut stars,
             labels: &mut labels,
             sky: &mut sky,
+            exposure: &mut exposure,
         });
         assert!(sky.galactic_grid);
         assert!(!stars.0);
         for item in MenuItem::TOGGLES {
-            assert!(item.text(&stars, &labels, &sky).is_ascii());
+            assert!(item.text(&stars, &labels, &sky, &exposure).is_ascii());
         }
     }
 
@@ -343,6 +366,7 @@ mod tests {
         app.init_resource::<ShowCatalogStars>()
             .init_resource::<LabelSettings>()
             .init_resource::<SkySettings>()
+            .init_resource::<ExposureSettings>()
             .add_systems(Update, sync_menu_text);
         let text = app
             .world_mut()

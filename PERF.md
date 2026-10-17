@@ -43,6 +43,7 @@ cargo test --release -- --ignored --nocapture perf_   # CPU micro-benchmarks for
 | 2026-10-17 | Phase 2.10-11: zoom, filtered/decluttered labels (+540 named-star labels, mag limit 6 in bench) | release | 1200 | 16.67 | 17.64 | 18.89 | 0 | 1810 |
 | 2026-10-17 | Phase 2.12: 3 grids + 88 constellation figures (all on in bench), +225 catalog stars | release | 1201 | 16.67 | 17.51 | 36.09 | 1 | 2018 |
 | 2026-10-17 | Phase 2.13-14: list panel generalized, star browser open (keys: N), locations | release | 1201 | 16.67 | 17.70 | 35.10 | 1 | 2018 |
+| 2026-10-17 | Phase 2.14a: auto-exposure (tour adapts at Sun/Sirius every loop) | release | 1201 | 16.67 | 17.57 | 33.01 | 2 | 2020 |
 
 ## Micro-benchmarks (`cargo test --release -- --ignored --nocapture perf_`)
 

@@ -13,7 +13,7 @@ use crate::info::{BodyInfo, BodyKind, format_mass, format_sig, surface_gravity};
 use crate::labels::{LabelLum, spawn_label};
 use crate::orbit::{Elements, J2000_JD, RefPlane, SCENE_JD};
 use crate::search::ObjectCatalog;
-use crate::stars::star_visual_radius;
+use crate::stars::{Star, star_visual_radius};
 use crate::zoom::{CameraFov, min_star_angle};
 use bevy::math::DVec3;
 use bevy::prelude::*;
@@ -257,7 +257,20 @@ pub fn setup_solar_system(
         },
         None,
     );
-    sp.commands.entity(sun).insert(LabelLum(1.0));
+    // The Sun's glow follows the same brightness model and exposure as every other star (and
+    // drives auto-exposure); update_star_brightness sizes it, so it doesn't need MinAngularSize.
+    sp.commands
+        .entity(sun)
+        .insert((
+            LabelLum(1.0),
+            Star {
+                spectral: 'G',
+                radius_solar: 1.0,
+                visual_lum: 1.0,
+                last_brightness: 0.0,
+            },
+        ))
+        .remove::<MinAngularSize>();
     spawned.push(("Sun", DVec3::ZERO, sun));
 
     for &(name, base, rates, radius_km, mass_kg, temp_k, [r, g, b]) in PLANETS {
