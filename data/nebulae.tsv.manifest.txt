@@ -1,0 +1,10 @@
+IP nebulae from published catalogs (via VizieR, CDS Strasbourg)
+Emission: Sharpless (1959, ApJS 4, 257; VII/20) positions/sizes/brightness classes; distances from
+  Mendez-Delgado et al. (2022, MNRAS 510, 4436, Table 1), Foster & Brunt (2015, AJ 150, 147; J/AJ/150/147),
+  Anderson et al. (2014, ApJS 212, 1; J/ApJS/212/1)
+Reflection: van den Bergh (1966, AJ 71, 990; VII/21) joined by HD number to HYG v4.4 stars
+This research has made use of the VizieR catalogue access tool, CDS, Strasbourg, France.
+Source sha256 (concatenated VizieR files): cdcd72ad77b7ffbb027dc9b9dc2106455088209e324a5d27fb3dec69ef619bbb
+Emission nebulae written: 168 (MD22 53, FB15 75, WISE 40); skipped without a distance: 145
+Reflection nebulae written: 52; skipped: 44 not Type I/I-II (star outside the nebula), 62 star not in HYG with a distance
+Built by: python3 -I tools/build_nebulae.py <src_dir> <hyg_v44.csv.gz> data/nebulae.tsv

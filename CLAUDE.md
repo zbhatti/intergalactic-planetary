@@ -94,6 +94,8 @@ Camera euler convention: `EulerRot::YXZ` — yaw around Y first, then pitch arou
 | `sky.rs` | Equatorial/ecliptic/galactic grids and 88 constellation figures (Stellarium data, HIP -> HYG), gizmo lines on a 1000 AU sphere around the camera; C toggles figures |
 | `auto_exposure.rs` | Eye adaptation: darkens (never brightens past the manual EV) so the brightest star in view sits at `TARGET_PEAK`; `\` toggles |
 | `exoplanets.rs` | NASA Exoplanet Archive systems: hosts matched to HYG by HIP or appended to `HygCatalog` (`hyg_id == 0`) in `main` before anything reads it; host entities (searchable, no labels); planets spawned only near their star |
+| `spectrum.rs` | Visible spectrum -> colour: CIE 1931 matching functions (analytic fit) -> linear sRGB; H II emission lines; dust-scattered starlight |
+| `nebulae.rs` + `nebula.wgsl` | 168 Sharpless H II regions + 52 van den Bergh reflection nebulae; emissive spheres ray-traced in a cube (back faces only), surface brightness on the star scale; `NotASurface` so flying through doesn't stall speed |
 | `ui.rs` | Distance/speed/exposure HUD labels, `format_distance`, `format_speed` |
 | `navigation.rs` | HUD reticle, off-screen arrow gizmo, camera auto-orient |
 | `menu.rs` | Esc pause menu: data-driven `MenuItem` toggles whose text is regenerated from the settings |
@@ -246,6 +248,16 @@ far beyond any solar-system body, so planets occlude it naturally.
 named stars and exoplanet hosts, a `Transform` on each would be rewritten and propagated on every
 floating-origin rebase. The proxy sphere adds `Transform` (at the right render position) when it
 gives a star a mesh. Keep new per-star entities Transform-free unless they render.
+
+### 16. Colours come from spectra, and they're eye colours
+
+Nebula colours are computed (`spectrum.rs`), not picked. The eye is ~4x more sensitive at [O III]
+501 nm than at H-alpha 656 nm, so an H II region's colour swings from pink (Balmer lines) to teal as
+[O III] grows; that's real (Orion's core looks greenish in a telescope), not a bug. Use intrinsic
+(unreddened) line ratios: dust between us and the nebula will redden it, so baking observed
+reddening into the colour would count the dust twice. Brightness is surface brightness on the
+star scale, so nebulae are faint at EV 0, as to the eye; auto-exposure keeps them faint while a
+bright star is in view. Turn auto off (`\`) and raise EV to see them like a long exposure.
 
 ### 10. Benchmarks need an awake display
 

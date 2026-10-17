@@ -12,6 +12,7 @@ use crate::labels::LabelSettings;
 use crate::menu::ShowCatalogStars;
 use crate::search::{ObjectCatalog, Search};
 use crate::sky::SkySettings;
+use crate::stars::ExposureSettings;
 use crate::zoom::CameraFov;
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput, NativeKey};
@@ -179,8 +180,17 @@ pub fn bench_setup(
     mut overlay: ResMut<ShowPerfOverlay>,
     mut fov: ResMut<CameraFov>,
     mut sky: ResMut<SkySettings>,
+    mut exposure: ResMut<ExposureSettings>,
     mut keys: EventWriter<KeyboardInput>,
 ) {
+    // `IP_BENCH_EV=<n>`: a fixed "long exposure" (auto-exposure off), e.g. to see nebulae.
+    if let Some(ev) = std::env::var("IP_BENCH_EV")
+        .ok()
+        .and_then(|v| v.parse::<i32>().ok())
+    {
+        exposure.ev = ev;
+        exposure.auto = false;
+    }
     // `IP_BENCH_FOV=<degrees>`: zoomed-in screenshots.
     if let Some(deg) = std::env::var("IP_BENCH_FOV")
         .ok()

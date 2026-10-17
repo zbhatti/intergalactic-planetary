@@ -2,7 +2,7 @@
 
 use crate::camera::{CursorLocked, FlyCam};
 use crate::constants::{AU_PER_LY, AU_PER_PC, KM_PER_AU};
-use crate::coords::{BodyRadius, NavSet, WorldPos, view_transform};
+use crate::coords::{BodyRadius, NavSet, NotASurface, WorldPos, view_transform};
 use crate::hyg::HygCatalog;
 use crate::hyg_bodies::HygEntities;
 use crate::menu::MenuOpen;
@@ -21,6 +21,7 @@ pub enum BodyKind {
     Moon,
     Asteroid,
     Comet,
+    Nebula,
     Constellation,
 }
 
@@ -33,6 +34,7 @@ impl BodyKind {
             BodyKind::Moon => "Moon",
             BodyKind::Asteroid => "Asteroid",
             BodyKind::Comet => "Comet",
+            BodyKind::Nebula => "Nebula",
             BodyKind::Constellation => "Constellation",
         }
     }
@@ -86,7 +88,16 @@ pub fn format_sig(x: f64) -> String {
 
 pub fn format_radius(radius_au: f64) -> String {
     let km = radius_au * KM_PER_AU;
-    if km >= 1.0e6 {
+    if radius_au >= 1000.0 {
+        // Nebulae: parsecs and light years.
+        format!(
+            "{} pc ({} ly)",
+            format_sig(radius_au / AU_PER_PC),
+            format_sig(radius_au / AU_PER_LY)
+        )
+    } else if radius_au >= 10.0 {
+        format!("{} AU", format_sig(radius_au))
+    } else if km >= 1.0e6 {
         format!("{:.3e} km ({:.2} Sun)", km, km / 695_700.0)
     } else {
         format!("{km:.0} km")
@@ -225,6 +236,14 @@ enum PickTarget {
     CatalogStar(usize),
 }
 
+type PickBody = (
+    Entity,
+    &'static WorldPos,
+    &'static BodyRadius,
+    &'static BodyInfo,
+    Has<NotASurface>,
+);
+
 /// Left click selects the object under the crosshair (screen center): any navigable entity,
 /// or any visible catalog star (which is then promoted to an entity).
 #[allow(clippy::too_many_arguments)]
@@ -236,7 +255,7 @@ pub fn select_on_click(
     mut search: ResMut<Search>,
     mut show_info: ResMut<ShowInfoPanel>,
     cam: Query<(&Camera, &Projection, &WorldPos, &Transform), With<FlyCam>>,
-    bodies: Query<(Entity, &WorldPos, &BodyRadius, &BodyInfo), Without<FlyCam>>,
+    bodies: Query<PickBody, Without<FlyCam>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     stars: (
         Res<HygCatalog>,
@@ -258,14 +277,19 @@ pub fn select_on_click(
     };
     let vp = Vec2::new(window.width(), window.height());
     let view = view_transform(cam_t.rotation);
-    let entity_hits = bodies.iter().filter_map(|(e, pos, r, _)| {
+    let entity_hits = bodies.iter().filter_map(|(e, pos, r, _, fly_through)| {
         let rel = pos.0 - cam_pos.0;
         let dist = rel.length();
         let screen = camera.world_to_viewport(&view, rel.as_vec3()).ok()?;
         Some(ScreenHit {
             id: PickTarget::Entity(e),
             screen,
-            disk_px: disk_radius_px(r.0, dist, persp.fov, vp.y),
+            // A nebula would swallow clicks on everything in front of it: pick it at its center.
+            disk_px: if fly_through {
+                0.0
+            } else {
+                disk_radius_px(r.0, dist, persp.fov, vp.y)
+            },
             dist,
         })
     });
@@ -299,7 +323,7 @@ pub fn select_on_click(
     };
     search.target = Some(entity);
     search.target_name = Some(match bodies.get(entity) {
-        Ok((_, _, _, info)) => info.name.clone(),
+        Ok((_, _, _, info, _)) => info.name.clone(),
         // Just promoted: the entity's components arrive when commands apply.
         Err(_) => hyg_star_name(&catalog, entity, &hyg_entities),
     });
@@ -333,7 +357,14 @@ pub fn info_text(info: &BodyInfo, radius_au: f64, dist_au: f64) -> String {
         format!("Distance: {}", format_distance(dist_au)),
         format!("Radius: {}", format_radius(radius_au)),
     ];
-    lines.extend(info.facts.iter().map(|(k, v)| format!("{k}: {v}")));
+    // An empty key continues the previous fact on a new line.
+    lines.extend(info.facts.iter().map(|(k, v)| {
+        if k.is_empty() {
+            format!("  {v}")
+        } else {
+            format!("{k}: {v}")
+        }
+    }));
     lines.push("[I] hide".to_string());
     lines.join("\n")
 }

@@ -55,6 +55,17 @@ the real 206,265. Headless tests fly to a body ~5 Mpc away and check arrival and
 | 14 | ✅ **Bookmarks / saved locations** (position, orientation, target) | Locations / bookmarks | K: save/jump/delete, persisted to the user data dir | Low |
 | 14a | ✅ **Auto-exposure** (eye adaptation from the brightest visible flux, computed on the CPU) to replace the fixed close-range brightness cap | Approach a star: the sky dims, then the star's disk becomes visible | Darken-only adaptation (fast down, slow up), resolved disks at constant surface brightness, Sun in the model; cap kept as backstop | Low |
 
+## Phase 2b — The interstellar medium we know (observed data only)
+
+Making the Milky Way feel real before leaving it. Only observed ISM here; modelled parts (beyond the
+data's reach) come with Phase 3.
+
+| # | Feature | IP today |
+|---|---|---|
+| 14b | ✅ **Catalogued nebulae** with colours from their visible spectra | 168 Sharpless H II regions (distances from Gaia parallaxes, OB stars, WISE) + 52 van den Bergh reflection nebulae at their stars; CIE colours from emission lines / scattered starlight, checked against van den Bergh's observed plate colours |
+| 14c | **3D dust: extinction and reddening** from the camera, Edenhofer et al. 2023 map (CC BY 4.0, 1.25 kpc) | Next |
+| 14d | **Visible dust**: dark clouds against nebulae and stars; per-region nebula line ratios where measured | Later |
+
 ## Phase 3 — Real content, large scale (Milky Way → Laniakea)
 
 | # | Feature | Check in SE | IP today | GPU |
